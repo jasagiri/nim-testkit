@@ -1,0 +1,19 @@
+#!/bin/sh
+# Nim TestKit pre-commit hook
+# Runs automated tests before allowing a commit
+
+# Get root directory
+ROOT_DIR=$(git rev-parse --show-toplevel)
+
+# Run tests
+echo "Running tests before commit..."
+cd "$ROOT_DIR" && scripts/nim-testkit/run/run.sh
+
+# If tests failed, prevent the commit
+if [ $? -ne 0 ]; then
+  echo "Commit rejected: Tests failed."
+  exit 1
+fi
+
+echo "All tests passed."
+exit 0

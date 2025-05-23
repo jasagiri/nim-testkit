@@ -1,0 +1,24 @@
+#!/bin/sh
+#
+# Nim TestKit pre-commit hook
+# Runs automated tests before allowing a commit
+
+# Get root directory
+ROOT_DIR=$(git rev-parse --show-toplevel)
+
+# Run test generator
+echo "Running test generator..."
+cd "$ROOT_DIR" && nimble generate
+
+# Run basic tests
+echo "Running basic tests..."
+cd "$ROOT_DIR" && nimble run
+
+# If tests failed, prevent the commit
+if [ $? -ne 0 ]; then
+  echo "Commit rejected: Tests failed."
+  exit 1
+fi
+
+echo "All tests passed."
+exit 0

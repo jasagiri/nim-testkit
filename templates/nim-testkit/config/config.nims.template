@@ -1,0 +1,15 @@
+# Nim TestKit tests configuration template
+# Copy this to your tests/config.nims if needed
+
+# Project paths
+switch("path", "../src")
+switch("nimcache", "../nimcache")
+
+# Enable threading
+switch("threads", "on")
+
+# When running with coverage
+when defined(coverage):
+  switch("debugger", "native")
+  switch("passC", "--coverage")
+  switch("passL", "--coverage")

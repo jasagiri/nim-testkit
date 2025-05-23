@@ -1,0 +1,206 @@
+import unittest, random, times, strutils, sequtils
+import $MODULE
+
+type
+  FuzzTestResult = object
+    iteration: int
+    input: string
+    success: bool
+    error: string
+    executionTime: float
+    crashed: bool
+
+proc generateRandomInt(min: int = low(int32), max: int = high(int32)): int =
+  ## Generate random integer
+  rand(max - min) + min
+
+proc generateRandomString(maxLen: int = 100, charset: string = ""): string =
+  ## Generate random string
+  let chars = if charset.len > 0: charset else: 
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>?"
+  
+  result = ""
+  let length = rand(maxLen)
+  for i in 0..<length:
+    result.add(chars[rand(chars.len - 1)])
+
+proc generateRandomSeq[T](generator: proc(): T, maxLen: int = 10): seq[T] =
+  ## Generate random sequence
+  result = @[]
+  let length = rand(maxLen)
+  for i in 0..<length:
+    result.add(generator())
+
+proc generateRandomFloat(min: float = -1000.0, max: float = 1000.0): float =
+  ## Generate random float
+  rand(max - min) + min
+
+proc generateRandomBool(): bool =
+  ## Generate random boolean
+  rand(2) == 1
+
+proc generateEdgeCaseInputs(): seq[string] =
+  ## Generate edge case inputs for testing
+  result = @[
+    "",  # Empty string
+    " ",  # Single space
+    "\n",  # Newline
+    "\t",  # Tab
+    "\0",  # Null character
+    "a" & "\xFF",  # Invalid UTF-8
+    "x".repeat(10000),  # Very long string
+    "🙂",  # Unicode emoji
+    "𝕏",  # Mathematical symbol
+    "\x01\x02\x03",  # Control characters
+  ]
+
+suite "Fuzz Tests for $MODULE_NAME":
+  
+  setup:
+    randomize(cast[int](cpuTime() * 1000000))
+  
+  test "$FUNCTION_NAME fuzz testing with random inputs":
+    const iterations = 1000
+    const timeoutSeconds = 30.0
+    
+    var results: seq[FuzzTestResult]
+    var crashCount = 0
+    var exceptionCount = 0
+    var successCount = 0
+    var timeoutCount = 0
+    
+    echo fmt"Running {iterations} fuzz test iterations..."
+    
+    for i in 0..<iterations:
+      var testResult = FuzzTestResult(iteration: i)
+      
+      # Generate random input based on expected function signature
+      # This needs to be customized based on the actual function
+      let randomInput = generateRandomString(rand(200))
+      testResult.input = randomInput
+      
+      let startTime = cpuTime()
+      
+      try:
+        # Call function with fuzz input
+        # Customize this based on the function signature
+        when $FUNCTION_NAME is proc(s: string): auto:
+          discard $FUNCTION_NAME(randomInput)
+        elif $FUNCTION_NAME is proc(i: int): auto:
+          discard $FUNCTION_NAME(generateRandomInt())
+        elif $FUNCTION_NAME is proc(): auto:
+          discard $FUNCTION_NAME()
+        else:
+          # Add more cases based on function signature
+          discard
+        
+        testResult.success = true
+        inc successCount
+        
+      except Exception as e:
+        testResult.success = false
+        testResult.error = e.msg
+        inc exceptionCount
+        
+        # Check for crash indicators
+        if "segmentation fault" in e.msg.toLower or 
+           "access violation" in e.msg.toLower or
+           "stack overflow" in e.msg.toLower:
+          testResult.crashed = true
+          inc crashCount
+          echo fmt"CRASH DETECTED in iteration {i}: {e.msg}"
+          echo fmt"Input that caused crash: {randomInput}"
+      
+      testResult.executionTime = cpuTime() - startTime
+      
+      # Check for timeouts
+      if testResult.executionTime > timeoutSeconds:
+        inc timeoutCount
+        echo fmt"TIMEOUT in iteration {i}: {testResult.executionTime:.2f}s"
+        echo fmt"Input: {randomInput}"
+      
+      results.add(testResult)
+      
+      # Progress indicator
+      if (i + 1) mod 100 == 0:
+        echo fmt"Progress: {i + 1}/{iterations} iterations completed"
+    
+    # Report results
+    echo "\nFuzz Testing Results:"
+    echo fmt"  Total Iterations: {iterations}"
+    echo fmt"  Successful: {successCount} ({successCount.float / iterations.float:.1%})"
+    echo fmt"  Exceptions: {exceptionCount} ({exceptionCount.float / iterations.float:.1%})"
+    echo fmt"  Crashes: {crashCount} ({crashCount.float / iterations.float:.1%})"
+    echo fmt"  Timeouts: {timeoutCount} ({timeoutCount.float / iterations.float:.1%})"
+    
+    # Calculate statistics
+    let executionTimes = results.mapIt(it.executionTime)
+    if executionTimes.len > 0:
+      let avgTime = executionTimes.sum() / executionTimes.len.float
+      let maxTime = executionTimes.max()
+      let minTime = executionTimes.min()
+      
+      echo fmt"  Avg Execution Time: {avgTime * 1000:.2f}ms"
+      echo fmt"  Max Execution Time: {maxTime * 1000:.2f}ms"
+      echo fmt"  Min Execution Time: {minTime * 1000:.2f}ms"
+    
+    # Assertions
+    check crashCount == 0, "No crashes should occur during fuzz testing"
+    check timeoutCount < iterations div 10, "Less than 10% of tests should timeout"
+  
+  test "$FUNCTION_NAME edge case testing":
+    let edgeCases = generateEdgeCaseInputs()
+    var failedCases: seq[string] = @[]
+    
+    echo fmt"Testing {edgeCases.len} edge cases..."
+    
+    for edgeCase in edgeCases:
+      try:
+        # Test with edge case input
+        when $FUNCTION_NAME is proc(s: string): auto:
+          discard $FUNCTION_NAME(edgeCase)
+        else:
+          # Handle other function signatures
+          discard
+          
+      except Exception as e:
+        if "segmentation fault" in e.msg.toLower or 
+           "access violation" in e.msg.toLower:
+          failedCases.add(edgeCase)
+          echo fmt"Edge case caused crash: '{edgeCase}' -> {e.msg}"
+    
+    check failedCases.len == 0, fmt"Edge cases should not cause crashes: {failedCases}"
+  
+  test "$FUNCTION_NAME property-based testing":
+    # Property-based testing - define properties that should always hold
+    const propertyIterations = 500
+    
+    for i in 0..<propertyIterations:
+      let input = generateRandomString(rand(50))
+      
+      try:
+        # Test function properties
+        when $FUNCTION_NAME is proc(s: string): string:
+          let result = $FUNCTION_NAME(input)
+          
+          # Example properties (customize based on function):
+          # Property: Result should not be longer than input + some factor
+          check result.len <= input.len * 2 + 100
+          
+          # Property: Function should be deterministic
+          let result2 = $FUNCTION_NAME(input)
+          check result == result2
+          
+        elif $FUNCTION_NAME is proc(i: int): int:
+          let inputInt = generateRandomInt(-1000, 1000)
+          let result = $FUNCTION_NAME(inputInt)
+          
+          # Example properties for integer functions:
+          # Property: Result should be within reasonable bounds
+          check result >= low(int32) and result <= high(int32)
+      
+      except Exception:
+        # Properties should hold even when exceptions occur
+        discard
+    
+    echo fmt"Property-based testing completed: {propertyIterations} iterations"

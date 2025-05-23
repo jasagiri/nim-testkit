@@ -1,0 +1,94 @@
+import unittest, times, json, random
+import $MODULE
+
+type
+  MutationOperator = object
+    name: string
+    original: string
+    mutated: string
+    
+  MutationResult = object
+    operator: MutationOperator
+    position: int
+    survived: bool
+    executionTime: float
+    testCase: string
+
+const mutationOperators = [
+  MutationOperator(name: "arithmetic_plus_to_minus", original: "+", mutated: "-"),
+  MutationOperator(name: "arithmetic_minus_to_plus", original: "-", mutated: "+"),
+  MutationOperator(name: "arithmetic_multiply_to_divide", original: "*", mutated: "/"),
+  MutationOperator(name: "arithmetic_divide_to_multiply", original: "/", mutated: "*"),
+  MutationOperator(name: "logical_and_to_or", original: "and", mutated: "or"),
+  MutationOperator(name: "logical_or_to_and", original: "or", mutated: "and"),
+  MutationOperator(name: "relational_eq_to_neq", original: "==", mutated: "!="),
+  MutationOperator(name: "relational_neq_to_eq", original: "!=", mutated: "=="),
+  MutationOperator(name: "relational_lt_to_gte", original: "<", mutated: ">="),
+  MutationOperator(name: "relational_gte_to_lt", original: ">=", mutated: "<"),
+  MutationOperator(name: "boolean_true_to_false", original: "true", mutated: "false"),
+  MutationOperator(name: "boolean_false_to_true", original: "false", mutated: "true")
+]
+
+proc runMutationTest(testName: string, testProc: proc()): MutationResult =
+  ## Run a single mutation test
+  result.testCase = testName
+  result.survived = true  # Assume mutation survives until proven otherwise
+  
+  let startTime = cpuTime()
+  
+  try:
+    testProc()
+    # If test passes with mutation, the mutation survived
+    result.survived = true
+  except Exception:
+    # If test fails with mutation, the mutation was caught
+    result.survived = false
+  
+  result.executionTime = cpuTime() - startTime
+
+suite "Mutation Tests for $MODULE_NAME":
+  
+  setup:
+    randomize()
+  
+  test "$FUNCTION_NAME mutation testing":
+    var results: seq[MutationResult]
+    
+    # Test each mutation operator
+    for op in mutationOperators:
+      let result = runMutationTest(op.name) do:
+        # Apply mutation and run test
+        # This is a template - specific mutations need to be implemented
+        # based on the actual function being tested
+        
+        # Example: Test the mutated function
+        when $FUNCTION_NAME is proc():
+          $FUNCTION_NAME()
+        else:
+          # Add appropriate test calls based on function signature
+          discard
+      
+      result.operator = op
+      results.add(result)
+    
+    # Analyze mutation test results
+    let totalMutants = results.len
+    let survivorCount = results.filterIt(it.survived).len
+    let killedCount = totalMutants - survivorCount
+    let mutationScore = killedCount.float / totalMutants.float
+    
+    echo "Mutation Testing Results:"
+    echo fmt"  Total Mutants: {totalMutants}"
+    echo fmt"  Killed: {killedCount}"
+    echo fmt"  Survived: {survivorCount}"
+    echo fmt"  Mutation Score: {mutationScore:.2%}"
+    
+    # List survivors for investigation
+    if survivorCount > 0:
+      echo "Surviving Mutants:"
+      for result in results:
+        if result.survived:
+          echo fmt"  - {result.operator.name}: {result.operator.original} -> {result.operator.mutated}"
+    
+    # Mutation score should be high (most mutants should be killed)
+    check mutationScore >= 0.8  # 80% of mutants should be killed

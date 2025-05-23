@@ -1,0 +1,321 @@
+import unittest, os, strutils, winlean, times
+import $MODULE
+
+# Windows-specific testing utilities
+when defined(windows):
+  
+  proc getWindowsVersion(): string =
+    ## Get Windows version information
+    try:
+      let (output, exitCode) = execCmdEx("ver")
+      if exitCode == 0:
+        result = output.strip()
+      else:
+        result = "Unknown Windows Version"
+    except:
+      result = "Unknown Windows Version"
+  
+  proc isRunningAsAdmin(): bool =
+    ## Check if running with administrator privileges
+    try:
+      # Try to access a protected registry key
+      let (output, exitCode) = execCmdEx("reg query HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion /v ProgramFilesDir")
+      result = exitCode == 0
+    except:
+      result = false
+  
+  proc getSystemDrive(): string =
+    ## Get the system drive (usually C:)
+    result = getEnv("SystemDrive", "C:")
+  
+  proc getTempPath(): string =
+    ## Get Windows temporary directory
+    result = getEnv("TEMP", getEnv("TMP", "C:\\temp"))
+  
+  proc testRegistryAccess(): bool =
+    ## Test registry access capabilities
+    try:
+      let (output, exitCode) = execCmdEx("reg query HKEY_CURRENT_USER\\Software")
+      result = exitCode == 0
+    except:
+      result = false
+  
+  proc testServiceAccess(): bool =
+    ## Test Windows service access
+    try:
+      let (output, exitCode) = execCmdEx("sc query eventlog")
+      result = exitCode == 0 and "RUNNING" in output
+    except:
+      result = false
+  
+  proc getAvailableDrives(): seq[string] =
+    ## Get list of available drives
+    result = @[]
+    for drive in 'A'..'Z':
+      let drivePath = $drive & ":\\"
+      if dirExists(drivePath):
+        result.add(drivePath)
+
+suite "Windows Platform Tests for $MODULE_NAME":
+  
+  setup:
+    when defined(windows):
+      echo "Windows System Information:"
+      echo "  Version: ", getWindowsVersion()
+      echo "  Running as Admin: ", isRunningAsAdmin()
+      echo "  System Drive: ", getSystemDrive()
+      echo "  Temp Path: ", getTempPath()
+      echo "  Available Drives: ", getAvailableDrives().join(", ")
+  
+  test "$MODULE_NAME Windows file system handling":
+    when defined(windows):
+      let testDir = getTempPath() / "nimtestkit_windows_test"
+      createDir(testDir)
+      defer: removeDir(testDir)
+      
+      # Test long path support
+      let longPath = testDir / "very_long_directory_name_that_exceeds_traditional_windows_path_limits"
+      createDir(longPath)
+      check dirExists(longPath)
+      
+      # Test case sensitivity (Windows is case-insensitive by default)
+      let file1 = testDir / "TestFile.txt"
+      let file2 = testDir / "testfile.txt"
+      
+      writeFile(file1, "content1")
+      
+      # On Windows, these should refer to the same file
+      check fileExists(file2)
+      check readFile(file2) == "content1"
+      
+      # Test special characters in filenames
+      let specialFile = testDir / "file with spaces & symbols!.txt"
+      writeFile(specialFile, "special content")
+      check fileExists(specialFile)
+      check readFile(specialFile) == "special content"
+      
+      # Test UNC path handling (if network available)
+      # This is a placeholder - actual UNC testing would require network setup
+      when compiles($MODULE.handleUNCPath):
+        let uncResult = $MODULE.handleUNCPath("\\\\localhost\\c$")
+        # check uncResult.isValid()
+  
+  test "$MODULE_NAME Windows registry integration":
+    when defined(windows):
+      skip("Registry tests require careful implementation to avoid system changes")
+      
+      # Example registry test (read-only):
+      # if testRegistryAccess():
+      #   when compiles($MODULE.readRegistryValue):
+      #     let regValue = $MODULE.readRegistryValue("HKEY_CURRENT_USER\\Software", "TestKey")
+      #     # Verify registry interaction works correctly
+  
+  test "$MODULE_NAME Windows service integration":
+    when defined(windows):
+      if not testServiceAccess():
+        skip("Windows service access not available")
+        return
+      
+      # Test service status checking
+      when compiles($MODULE.checkServiceStatus):
+        let serviceStatus = $MODULE.checkServiceStatus("EventLog")
+        check serviceStatus.isRunning
+      
+      # Test service interaction (read-only operations)
+      when compiles($MODULE.listServices):
+        let services = $MODULE.listServices()
+        check services.len > 0
+        check services.anyIt("EventLog" in it.name)
+  
+  test "$MODULE_NAME Windows performance counters":
+    when defined(windows):
+      # Test performance counter access
+      try:
+        let (output, exitCode) = execCmdEx("typeperf \"\\Processor(_Total)\\% Processor Time\" -sc 1")
+        if exitCode == 0:
+          when compiles($MODULE.readPerformanceCounter):
+            let cpuUsage = $MODULE.readPerformanceCounter("\\Processor(_Total)\\% Processor Time")
+            check cpuUsage >= 0.0 and cpuUsage <= 100.0
+      except:
+        skip("Performance counter access not available")
+  
+  test "$MODULE_NAME Windows error handling":
+    when defined(windows):
+      # Test Windows-specific error codes
+      when compiles($MODULE.handleWindowsError):
+        # Test common Windows error scenarios
+        let errorResult = $MODULE.handleWindowsError(2)  # File not found
+        check errorResult.errorCode == 2
+        check "not found" in errorResult.message.toLower()
+        
+        let accessResult = $MODULE.handleWindowsError(5)  # Access denied
+        check accessResult.errorCode == 5
+        check "access" in accessResult.message.toLower()
+  
+  test "$MODULE_NAME Windows COM integration":
+    when defined(windows):
+      skip("COM integration tests require specific COM objects")
+      
+      # Example COM test:
+      # when compiles($MODULE.createCOMObject):
+      #   let comObject = $MODULE.createCOMObject("Shell.Application")
+      #   check comObject != nil
+      #   
+      #   when compiles(comObject.getWindows):
+      #     let windows = comObject.getWindows()
+      #     check windows.count >= 0
+  
+  test "$MODULE_NAME Windows PowerShell integration":
+    when defined(windows):
+      # Test PowerShell execution
+      try:
+        let (output, exitCode) = execCmdEx("powershell -Command \"Get-Date\"")
+        if exitCode == 0:
+          when compiles($MODULE.executePowerShell):
+            let psResult = $MODULE.executePowerShell("Get-Process | Select-Object -First 5")
+            check psResult.success
+            check psResult.output.len > 0
+        else:
+          skip("PowerShell not available")
+      except:
+        skip("PowerShell execution failed")
+  
+  test "$MODULE_NAME Windows path handling":
+    when defined(windows):
+      # Test Windows-specific path operations
+      let windowsPaths = @[
+        "C:\\Windows\\System32",
+        "C:\\Program Files",
+        "C:\\Program Files (x86)",
+        getTempPath(),
+        getSystemDrive() & "\\Users"
+      ]
+      
+      for path in windowsPaths:
+        if dirExists(path):
+          when compiles($MODULE.normalizePath):
+            let normalized = $MODULE.normalizePath(path)
+            check normalized.len > 0
+            check "\\" in normalized  # Should contain Windows path separators
+          
+          when compiles($MODULE.getPathInfo):
+            let pathInfo = $MODULE.getPathInfo(path)
+            check pathInfo.exists
+            check pathInfo.isDirectory
+  
+  test "$MODULE_NAME Windows process management":
+    when defined(windows):
+      # Test process creation and management
+      when compiles($MODULE.createProcess):
+        let processResult = $MODULE.createProcess("cmd.exe", @["/c", "echo", "test"])
+        check processResult.success
+        check processResult.exitCode == 0
+        check "test" in processResult.output
+      
+      # Test process enumeration
+      when compiles($MODULE.enumerateProcesses):
+        let processes = $MODULE.enumerateProcesses()
+        check processes.len > 0
+        check processes.anyIt("winlogon" in it.name.toLower() or "csrss" in it.name.toLower())
+  
+  test "$MODULE_NAME Windows security context":
+    when defined(windows):
+      # Test security context operations
+      when compiles($MODULE.getCurrentUser):
+        let currentUser = $MODULE.getCurrentUser()
+        check currentUser.len > 0
+        check "\\" in currentUser or "@" in currentUser  # Domain\User or UPN format
+      
+      # Test privilege checking
+      when compiles($MODULE.hasPrivilege):
+        let hasBackup = $MODULE.hasPrivilege("SeBackupPrivilege")
+        let hasDebug = $MODULE.hasPrivilege("SeDebugPrivilege")
+        # These may be false for non-admin users, which is expected
+        echo fmt"Backup privilege: {hasBackup}, Debug privilege: {hasDebug}"
+  
+  test "$MODULE_NAME Windows file attributes":
+    when defined(windows):
+      let testFile = getTempPath() / "test_attributes.txt"
+      writeFile(testFile, "test content")
+      defer: removeFile(testFile)
+      
+      # Test Windows file attributes
+      when compiles($MODULE.getFileAttributes):
+        let attrs = $MODULE.getFileAttributes(testFile)
+        check attrs.exists
+        check not attrs.isDirectory
+        check not attrs.isHidden
+        check not attrs.isSystem
+      
+      # Test setting attributes
+      when compiles($MODULE.setFileAttributes):
+        $MODULE.setFileAttributes(testFile, hidden = true)
+        let newAttrs = $MODULE.getFileAttributes(testFile)
+        check newAttrs.isHidden
+        
+        # Reset attributes
+        $MODULE.setFileAttributes(testFile, hidden = false)
+  
+  test "$MODULE_NAME Windows environment variables":
+    when defined(windows):
+      # Test Windows-specific environment variables
+      let windowsEnvVars = @[
+        "COMPUTERNAME",
+        "USERNAME",
+        "USERPROFILE",
+        "PROGRAMFILES",
+        "SYSTEMROOT",
+        "WINDIR"
+      ]
+      
+      for envVar in windowsEnvVars:
+        let value = getEnv(envVar)
+        if value.len > 0:
+          when compiles($MODULE.processEnvironmentVariable):
+            let processed = $MODULE.processEnvironmentVariable(envVar, value)
+            check processed.isValid
+            check processed.name == envVar
+  
+  test "$MODULE_NAME Windows locale and encoding":
+    when defined(windows):
+      # Test Windows locale handling
+      when compiles($MODULE.getSystemLocale):
+        let locale = $MODULE.getSystemLocale()
+        check locale.len > 0
+        echo fmt"System locale: {locale}"
+      
+      # Test encoding handling
+      when compiles($MODULE.convertEncoding):
+        let testString = "Test string with äöü characters"
+        let converted = $MODULE.convertEncoding(testString, "UTF-8", "CP1252")
+        check converted.len > 0
+        
+        # Convert back
+        let reconverted = $MODULE.convertEncoding(converted, "CP1252", "UTF-8")
+        check reconverted == testString
+  
+  test "$MODULE_NAME Windows memory management":
+    when defined(windows):
+      # Test Windows-specific memory operations
+      let initialMemory = getOccupiedMem()
+      
+      # Allocate memory
+      var largeData: seq[byte] = newSeq[byte](10_000_000)  # 10MB
+      for i in 0..<largeData.len:
+        largeData[i] = byte(i mod 256)
+      
+      let peakMemory = getOccupiedMem()
+      
+      # Test memory usage
+      when compiles($MODULE.getMemoryUsage):
+        let memInfo = $MODULE.getMemoryUsage()
+        check memInfo.workingSet > 0
+        check memInfo.privateBytes > 0
+        check memInfo.virtualBytes > 0
+      
+      # Clean up
+      largeData = @[]
+      GC_fullCollect()
+      
+      let finalMemory = getOccupiedMem()
+      echo fmt"Memory usage - Initial: {initialMemory}, Peak: {peakMemory}, Final: {finalMemory}"

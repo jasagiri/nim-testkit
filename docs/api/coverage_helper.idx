@@ -1,0 +1,4 @@
+nimTitle	coverage_helper	coverage_helper.html	module coverage_helper		0
+nim	getProjectRootDir	coverage_helper.html#getProjectRootDir	proc getProjectRootDir(): string		9
+nim	generateCoverage	coverage_helper.html#generateCoverage	proc generateCoverage()		188
+nim	main	coverage_helper.html#main	proc main()		232

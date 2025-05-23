@@ -1,0 +1,23 @@
+nimTitle	jujutsu_test_integration	jujutsu_test_integration.html	module jujutsu_test_integration		0
+nim	JujutsuInfo	jujutsu_test_integration.html#JujutsuInfo	object JujutsuInfo		11
+nim	TestCache	jujutsu_test_integration.html#TestCache	object TestCache		19
+nim	TestHistoryResult	jujutsu_test_integration.html#TestHistoryResult	object TestHistoryResult		25
+nim	TestHistory	jujutsu_test_integration.html#TestHistory	object TestHistory		30
+nim	checkJujutsuRepo	jujutsu_test_integration.html#checkJujutsuRepo	proc checkJujutsuRepo(): bool		37
+nim	getJujutsuInfo	jujutsu_test_integration.html#getJujutsuInfo	proc getJujutsuInfo(): JujutsuInfo		42
+nim	getFilesInChange	jujutsu_test_integration.html#getFilesInChange,string	proc getFilesInChange(changeId = "@"): seq[string]		63
+nim	getContentHash	jujutsu_test_integration.html#getContentHash,seq[string]	proc getContentHash(files: seq[string]): string		73
+nim	loadTestCache	jujutsu_test_integration.html#loadTestCache,string	proc loadTestCache(cacheFile = ".nimtestkit/cache.json"): TestCache		83
+nim	saveTestCache	jujutsu_test_integration.html#saveTestCache,TestCache,string	proc saveTestCache(cache: TestCache; cacheFile = ".nimtestkit/cache.json")		105
+nim	shouldRunTests	jujutsu_test_integration.html#shouldRunTests,JujutsuInfo,TestCache	proc shouldRunTests(jjInfo: JujutsuInfo; cache: TestCache): bool		124
+nim	filterTestsByChange	jujutsu_test_integration.html#filterTestsByChange,seq[string],JujutsuInfo	proc filterTestsByChange(testFiles: seq[string]; jjInfo: JujutsuInfo): seq[string]		149
+nim	getOperationLog	jujutsu_test_integration.html#getOperationLog	proc getOperationLog(): seq[string]		173
+nim	getWorkspaces	jujutsu_test_integration.html#getWorkspaces	proc getWorkspaces(): seq[string]		181
+nim	saveTestHistory	jujutsu_test_integration.html#saveTestHistory,TestHistory,string	proc saveTestHistory(history: TestHistory; historyDir = ".nimtestkit/history")		189
+nim	loadTestHistory	jujutsu_test_integration.html#loadTestHistory,string,string	proc loadTestHistory(changeId: string; historyDir = ".nimtestkit/history"): TestHistory		213
+nim	trackTestEvolution	jujutsu_test_integration.html#trackTestEvolution,string	proc trackTestEvolution(currentChange: string): seq[TestHistory]		237
+nim	getSnapshotInfo	jujutsu_test_integration.html#getSnapshotInfo	proc getSnapshotInfo(): tuple[hash: string, modTime: Time]		252
+nim	optimizeTestRuns	jujutsu_test_integration.html#optimizeTestRuns,seq[string],string	proc optimizeTestRuns(testFiles: seq[string]; lastSnapshot: string): seq[string]		263
+nim	setupWorkspaceTests	jujutsu_test_integration.html#setupWorkspaceTests,string	proc setupWorkspaceTests(workspace: string)		289
+nim	setupJujutsuHooks	jujutsu_test_integration.html#setupJujutsuHooks	proc setupJujutsuHooks()		301
+nim	generateConflictTests	jujutsu_test_integration.html#generateConflictTests,seq[string]	proc generateConflictTests(conflictedFiles: seq[string]): string		325

@@ -1,0 +1,6 @@
+nimTitle	test_runner	test_runner.html	module test_runner		0
+nim	TestResult	test_runner.html#TestResult	object TestResult		9
+nim	TestSuite	test_runner.html#TestSuite	object TestSuite		16
+nim	generateJUnitXML	test_runner.html#generateJUnitXML,TestSuite	proc generateJUnitXML(suite: TestSuite): string		51
+nim	generateTAP	test_runner.html#generateTAP,TestSuite	proc generateTAP(suite: TestSuite): string		83
+nim	filterTests	test_runner.html#filterTests,seq[string],string	proc filterTests(testFiles: seq[string]; pattern: string): seq[string]		128

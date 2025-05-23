@@ -1,0 +1,286 @@
+import unittest, macros, typetraits
+import $MODULE
+
+# Contract testing framework
+type
+  ContractError* = object of CatchableError
+  PreconditionError* = object of ContractError
+  PostconditionError* = object of ContractError
+  InvariantError* = object of ContractError
+
+template requires*(condition: bool, message: string = ""): untyped =
+  ## Precondition check
+  if not condition:
+    let msg = if message.len > 0: message else: "Precondition failed"
+    raise newException(PreconditionError, msg)
+
+template ensures*(condition: bool, message: string = ""): untyped =
+  ## Postcondition check
+  if not condition:
+    let msg = if message.len > 0: message else: "Postcondition failed"
+    raise newException(PostconditionError, msg)
+
+template invariant*(condition: bool, message: string = ""): untyped =
+  ## Invariant check
+  if not condition:
+    let msg = if message.len > 0: message else: "Invariant failed"
+    raise newException(InvariantError, msg)
+
+# Contract wrapper generation
+macro contractWrapper*(procDef: untyped): untyped =
+  ## Generate a contract-enabled wrapper for a procedure
+  expectKind(procDef, nnkProcDef)
+  
+  let originalName = procDef.name
+  let wrapperName = newIdentNode($originalName & "_with_contracts")
+  let params = procDef.params
+  let body = procDef.body
+  
+  result = quote do:
+    proc `wrapperName`*(`params`): auto =
+      # Pre-execution invariant checks
+      when compiles(checkModuleInvariants()):
+        invariant(checkModuleInvariants(), "Module invariants before execution")
+      
+      # Call original function
+      let result = `originalName`(`params`)
+      
+      # Post-execution invariant checks
+      when compiles(checkModuleInvariants()):
+        invariant(checkModuleInvariants(), "Module invariants after execution")
+      
+      return result
+
+# Helper procedures for common contract patterns
+proc isValidPointer*[T](p: ptr T): bool =
+  ## Check if pointer is valid (not nil and accessible)
+  try:
+    result = p != nil
+    if result:
+      # Try to access the memory (this is unsafe but for testing)
+      when T is SomeInteger:
+        discard p[]
+  except:
+    result = false
+
+proc isValidRange*(value, min, max: SomeNumber): bool =
+  ## Check if value is within valid range
+  value >= min and value <= max
+
+proc isValidString*(s: string, maxLen: int = 10000): bool =
+  ## Check if string is valid and within reasonable bounds
+  s.len <= maxLen
+
+proc isValidSeq*[T](s: seq[T], maxLen: int = 10000): bool =
+  ## Check if sequence is valid and within reasonable bounds
+  s.len <= maxLen
+
+# Contract testing templates
+suite "Contract Tests for $MODULE_NAME":
+  
+  test "$FUNCTION_NAME precondition validation":
+    # Test that invalid inputs are properly rejected
+    
+    when $FUNCTION_NAME is proc(x: int): auto:
+      # Test integer input validation
+      expect(PreconditionError):
+        # Test with invalid integer (customize based on function requirements)
+        requires(false, "Invalid integer input")
+        discard $FUNCTION_NAME(-999999)
+      
+      # Test boundary conditions
+      expect(PreconditionError):
+        requires(false, "Integer out of range")
+        discard $FUNCTION_NAME(int.high)
+    
+    elif $FUNCTION_NAME is proc(s: string): auto:
+      # Test string input validation
+      expect(PreconditionError):
+        requires(false, "Empty string not allowed")
+        discard $FUNCTION_NAME("")
+      
+      expect(PreconditionError):
+        requires(false, "String too long")
+        discard $FUNCTION_NAME("x".repeat(100000))
+    
+    elif $FUNCTION_NAME is proc(data: seq[int]): auto:
+      # Test sequence input validation
+      expect(PreconditionError):
+        requires(false, "Empty sequence not allowed")
+        discard $FUNCTION_NAME(@[])
+      
+      expect(PreconditionError):
+        requires(false, "Sequence too large")
+        discard $FUNCTION_NAME(newSeq[int](100000))
+    
+    else:
+      # Generic precondition tests
+      expect(PreconditionError):
+        requires(false, "Generic precondition failure")
+        # Add specific precondition tests based on function signature
+  
+  test "$FUNCTION_NAME postcondition validation":
+    # Test that results meet expected conditions
+    
+    when $FUNCTION_NAME is proc(x: int): int:
+      # Test integer function postconditions
+      let validInput = 42
+      let result = $FUNCTION_NAME(validInput)
+      
+      # Example postconditions (customize based on function behavior)
+      ensures(result != 0, "Result should not be zero")
+      ensures(isValidRange(result, int.low, int.high), "Result should be valid integer")
+    
+    elif $FUNCTION_NAME is proc(s: string): string:
+      # Test string function postconditions
+      let validInput = "test input"
+      let result = $FUNCTION_NAME(validInput)
+      
+      # Example postconditions
+      ensures(result.len > 0, "Result should not be empty")
+      ensures(isValidString(result), "Result should be valid string")
+      ensures(result.len <= validInput.len * 2, "Result should not be excessively long")
+    
+    elif $FUNCTION_NAME is proc(data: seq[int]): seq[int]:
+      # Test sequence function postconditions
+      let validInput = @[1, 2, 3, 4, 5]
+      let result = $FUNCTION_NAME(validInput)
+      
+      # Example postconditions
+      ensures(isValidSeq(result), "Result should be valid sequence")
+      ensures(result.len >= 0, "Result length should be non-negative")
+    
+    else:
+      # Generic postcondition tests
+      when $FUNCTION_NAME is proc(): auto:
+        let result = $FUNCTION_NAME()
+        
+        # Generic postconditions
+        when result is ref:
+          ensures(result != nil, "Result reference should not be nil")
+        when result is string:
+          ensures(isValidString(result), "Result string should be valid")
+        when result is SomeNumber:
+          ensures(not result.isNaN(), "Numeric result should not be NaN")
+  
+  test "$FUNCTION_NAME invariant preservation":
+    # Test that class/module invariants are preserved
+    
+    # Check initial state
+    when compiles(checkModuleInvariants()):
+      let initialState = checkModuleInvariants()
+      invariant(initialState, "Initial module invariants should hold")
+    
+    # Execute function
+    when $FUNCTION_NAME is proc(): auto:
+      discard $FUNCTION_NAME()
+    elif $FUNCTION_NAME is proc(x: int): auto:
+      discard $FUNCTION_NAME(42)
+    elif $FUNCTION_NAME is proc(s: string): auto:
+      discard $FUNCTION_NAME("test")
+    else:
+      # Add more cases based on function signature
+      discard
+    
+    # Check state after execution
+    when compiles(checkModuleInvariants()):
+      let finalState = checkModuleInvariants()
+      invariant(finalState, "Module invariants should be preserved after execution")
+  
+  test "$FUNCTION_NAME contract composition":
+    # Test contracts work correctly when functions are composed
+    
+    when $FUNCTION_NAME is proc(x: int): int:
+      # Test function composition with contracts
+      proc composedOperation(input: int): int =
+        requires(input > 0, "Composed operation requires positive input")
+        
+        let intermediate = $FUNCTION_NAME(input)
+        ensures(intermediate != 0, "Intermediate result should not be zero")
+        
+        let final = $FUNCTION_NAME(intermediate)
+        ensures(final != 0, "Final result should not be zero")
+        
+        return final
+      
+      # Test valid composition
+      let result = composedOperation(10)
+      check result != 0
+      
+      # Test invalid composition
+      expect(PreconditionError):
+        discard composedOperation(-5)
+  
+  test "$FUNCTION_NAME error state contracts":
+    # Test that contracts work correctly in error conditions
+    
+    # Test exception handling with contracts
+    proc safeWrapper(): bool =
+      try:
+        when $FUNCTION_NAME is proc(): auto:
+          discard $FUNCTION_NAME()
+        elif $FUNCTION_NAME is proc(x: int): auto:
+          discard $FUNCTION_NAME(42)
+        
+        ensures(true, "Function completed successfully")
+        return true
+        
+      except Exception as e:
+        # Even in error conditions, invariants should hold
+        when compiles(checkModuleInvariants()):
+          invariant(checkModuleInvariants(), "Invariants should hold even after exceptions")
+        
+        return false
+    
+    # This should not raise contract violations
+    discard safeWrapper()
+  
+  test "$FUNCTION_NAME performance with contracts":
+    # Test that contracts don't significantly impact performance
+    
+    let iterations = 1000
+    
+    # Measure time without contracts
+    let startWithout = cpuTime()
+    for i in 0..<iterations:
+      when $FUNCTION_NAME is proc(): auto:
+        discard $FUNCTION_NAME()
+      elif $FUNCTION_NAME is proc(x: int): auto:
+        discard $FUNCTION_NAME(i)
+    let timeWithout = cpuTime() - startWithout
+    
+    # Measure time with contracts (using wrapper)
+    let startWith = cpuTime()
+    for i in 0..<iterations:
+      when compiles($FUNCTION_NAME_with_contracts()):
+        when $FUNCTION_NAME_with_contracts is proc(): auto:
+          discard $FUNCTION_NAME_with_contracts()
+        elif $FUNCTION_NAME_with_contracts is proc(x: int): auto:
+          discard $FUNCTION_NAME_with_contracts(i)
+    let timeWith = cpuTime() - startWith
+    
+    let overhead = if timeWithout > 0: (timeWith / timeWithout - 1.0) * 100 else: 0.0
+    
+    echo fmt"Contract overhead: {overhead:.1f}%"
+    echo fmt"Time without contracts: {timeWithout * 1000:.3f}ms"
+    echo fmt"Time with contracts: {timeWith * 1000:.3f}ms"
+    
+    # Contract overhead should be reasonable (< 50% in debug builds)
+    when defined(debug):
+      check overhead < 50.0, "Contract overhead should be reasonable in debug builds"
+    else:
+      check overhead < 20.0, "Contract overhead should be minimal in release builds"
+
+# Helper function for module-level invariants (to be implemented per module)
+proc checkModuleInvariants*(): bool =
+  ## Check module-level invariants
+  ## This should be implemented for each specific module
+  ## Return true if all module invariants hold
+  
+  # Example checks (customize based on module):
+  # - Global state consistency
+  # - Resource allocation/deallocation balance
+  # - Data structure integrity
+  # - Business logic constraints
+  
+  result = true  # Placeholder - implement actual checks

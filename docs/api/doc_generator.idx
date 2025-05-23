@@ -1,0 +1,9 @@
+nimTitle	doc_generator	doc_generator.html	module doc_generator		0
+nim	TestDoc	doc_generator.html#TestDoc	object TestDoc		9
+nim	ModuleDoc	doc_generator.html#ModuleDoc	object ModuleDoc		16
+nim	extractTestDocs	doc_generator.html#extractTestDocs,string	proc extractTestDocs(testFile: string): seq[TestDoc]		22
+nim	generateMarkdownDocs	doc_generator.html#generateMarkdownDocs,TestKitConfig,string	proc generateMarkdownDocs(config: TestKitConfig; outputDir = "docs"): string		65
+nim	generateCoverageMarkdown	doc_generator.html#generateCoverageMarkdown,TestKitConfig	proc generateCoverageMarkdown(config: TestKitConfig): string		136
+nim	generateTestBadges	doc_generator.html#generateTestBadges,TestKitConfig,string	proc generateTestBadges(config: TestKitConfig; outputDir = "badges")		210
+nim	generateAPIDocs	doc_generator.html#generateAPIDocs,TestKitConfig,string	proc generateAPIDocs(config: TestKitConfig; outputDir = "docs/api")		234
+nim	integrationWithNimDoc	doc_generator.html#integrationWithNimDoc,string	proc integrationWithNimDoc(sourceFile: string): string		285

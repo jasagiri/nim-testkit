@@ -1,0 +1,107 @@
+[directories]
+source = "src"
+tests = "tests"
+
+[patterns]
+include = ["*.nim"]
+exclude = ["*_test.nim", "test_*.nim"]
+test_name = "${module}_test.nim"
+
+[coverage]
+threshold = 80.0
+
+[tests]
+parallel = false
+color = true
+power_assert = true
+
+[jujutsu]
+enabled = false  # Deprecated, use [vcs] section
+
+[vcs]
+# Enable/disable version control system integrations
+git = true
+jujutsu = false
+mercurial = false
+svn = false
+fossil = false
+
+[templates]
+test = """
+import unittest
+import power_assert
+import "$MODULE"
+
+suite "$MODULE_NAME Tests":
+  test "example test":
+    assert true
+"""
+
+# Advanced Testing Features
+[advanced]
+enabled = true
+test_types = ["unit", "integration", "benchmark", "fuzz", "mutation", "contract"]
+
+[advanced.mutation]
+operators = ["arithmetic", "logical", "relational", "assignment"]
+iterations = 100
+survivor_threshold = 0.1
+output_dir = "build/mutation"
+
+[advanced.fuzz]
+iterations = 1000
+timeout = 30
+input_types = ["int", "string", "seq", "object"]
+output_dir = "build/fuzz"
+
+[advanced.benchmark]
+iterations = 1000
+warmup_runs = 10
+time_limit = 5.0
+memory_limit = 100000000
+
+[advanced.contract]
+preconditions = true
+postconditions = true
+invariants = true
+output_dir = "build/contracts"
+
+# Platform-Specific Configuration
+[platform]
+default = "auto"  # auto, windows, macos, linux, ios, android, wasm
+
+[platform.windows]
+enabled = true
+script_extension = ".ps1"
+shell_command = "powershell -ExecutionPolicy Bypass -File"
+build_flags = ["-d:windows", "--os:windows"]
+
+[platform.macos]
+enabled = true
+script_extension = ".sh"
+shell_command = "bash"
+build_flags = ["-d:macosx", "--os:macosx"]
+
+[platform.linux]
+enabled = true
+script_extension = ".sh"
+shell_command = "bash"
+build_flags = ["-d:linux", "--os:linux"]
+
+[platform.ios]
+enabled = false
+script_extension = ".sh"
+shell_command = "bash"
+build_flags = ["-d:ios", "--os:ios", "--cpu:arm64"]
+
+[platform.android]
+enabled = false
+script_extension = ".sh"
+shell_command = "bash"
+build_flags = ["-d:android", "--os:android", "--cpu:arm64"]
+
+[platform.wasm]
+enabled = false
+script_extension = ".js"
+shell_command = "node"
+build_flags = ["-d:js", "--backend:js"]

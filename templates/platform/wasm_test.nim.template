@@ -1,0 +1,487 @@
+import unittest, asyncjs, dom, jsconsole, jsffi, times
+import $MODULE
+
+# WebAssembly-specific testing utilities
+when defined(js):
+  
+  type
+    BrowserInfo = object
+      name: string
+      version: string
+      userAgent: string
+      supportsWebAssembly: bool
+      supportsSharedArrayBuffer: bool
+      supportsOffscreen: bool
+    
+    PerformanceMetrics = object
+      memoryUsage: int
+      heapSize: int
+      jsHeapSizeLimit: int
+      loadTime: float
+      renderTime: float
+    
+    WebAPISupport = object
+      localStorage: bool
+      sessionStorage: bool
+      indexedDB: bool
+      webWorkers: bool
+      serviceWorkers: bool
+      webGL: bool
+      canvas: bool
+      fetch: bool
+  
+  proc getBrowserInfo(): BrowserInfo =
+    ## Get browser information and capabilities
+    let nav = window.navigator
+    let userAgent = $nav.userAgent
+    
+    result.userAgent = userAgent
+    result.supportsWebAssembly = js"typeof WebAssembly !== 'undefined'".to(bool)
+    result.supportsSharedArrayBuffer = js"typeof SharedArrayBuffer !== 'undefined'".to(bool)
+    result.supportsOffscreen = js"typeof OffscreenCanvas !== 'undefined'".to(bool)
+    
+    # Detect browser
+    if "Chrome" in userAgent:
+      result.name = "Chrome"
+      let chromeMatch = userAgent.find("Chrome/")
+      if chromeMatch >= 0:
+        result.version = userAgent[chromeMatch + 7..chromeMatch + 12].split(" ")[0]
+    elif "Firefox" in userAgent:
+      result.name = "Firefox"
+      let firefoxMatch = userAgent.find("Firefox/")
+      if firefoxMatch >= 0:
+        result.version = userAgent[firefoxMatch + 8..^1]
+    elif "Safari" in userAgent and "Chrome" notin userAgent:
+      result.name = "Safari"
+      let safariMatch = userAgent.find("Version/")
+      if safariMatch >= 0:
+        result.version = userAgent[safariMatch + 8..safariMatch + 15].split(" ")[0]
+    else:
+      result.name = "Unknown"
+      result.version = "unknown"
+  
+  proc getPerformanceMetrics(): PerformanceMetrics =
+    ## Get performance and memory metrics
+    let performance = window.performance
+    let memory = js"performance.memory"
+    
+    if not memory.isNull and not memory.isUndefined:
+      result.memoryUsage = memory.usedJSHeapSize.to(int)
+      result.heapSize = memory.totalJSHeapSize.to(int)
+      result.jsHeapSizeLimit = memory.jsHeapSizeLimit.to(int)
+    
+    result.loadTime = performance.now()
+  
+  proc checkWebAPISupport(): WebAPISupport =
+    ## Check which Web APIs are supported
+    result.localStorage = js"typeof Storage !== 'undefined' && typeof localStorage !== 'undefined'".to(bool)
+    result.sessionStorage = js"typeof sessionStorage !== 'undefined'".to(bool)
+    result.indexedDB = js"typeof indexedDB !== 'undefined'".to(bool)
+    result.webWorkers = js"typeof Worker !== 'undefined'".to(bool)
+    result.serviceWorkers = js"typeof navigator.serviceWorker !== 'undefined'".to(bool)
+    result.webGL = js"typeof WebGLRenderingContext !== 'undefined'".to(bool)
+    result.canvas = js"typeof HTMLCanvasElement !== 'undefined'".to(bool)
+    result.fetch = js"typeof fetch !== 'undefined'".to(bool)
+  
+  proc createTestCanvas(): Element =
+    ## Create a test canvas element
+    let canvas = document.createElement("canvas")
+    canvas.setAttribute("width", "800")
+    canvas.setAttribute("height", "600")
+    canvas.setAttribute("id", "test-canvas")
+    return canvas
+  
+  proc testDOMManipulation(): bool =
+    ## Test DOM manipulation capabilities
+    try:
+      let testDiv = document.createElement("div")
+      testDiv.id = "test-element"
+      testDiv.innerHTML = "Test Content"
+      testDiv.className = "test-class"
+      
+      document.body.appendChild(testDiv)
+      
+      let retrieved = document.getElementById("test-element")
+      let isValid = retrieved != nil and retrieved.innerHTML == "Test Content"
+      
+      document.body.removeChild(testDiv)
+      return isValid
+    except:
+      return false
+  
+  proc testLocalStorage(): bool =
+    ## Test localStorage functionality
+    try:
+      let testKey = "nimtestkit_test"
+      let testValue = "test_value_123"
+      
+      window.localStorage.setItem(testKey, testValue)
+      let retrieved = window.localStorage.getItem(testKey)
+      window.localStorage.removeItem(testKey)
+      
+      return retrieved == testValue
+    except:
+      return false
+  
+  proc testAsyncJavaScript(): Future[bool] {.async.} =
+    ## Test async JavaScript interop
+    try:
+      let promise = newPromise() do (resolve: proc(value: bool)):
+        discard setTimeout(proc() = resolve(true), 50)
+      
+      let result = await promise
+      return result
+    except:
+      return false
+  
+  proc measureJSInteropPerformance(): float =
+    ## Measure JavaScript interop performance
+    let iterations = 10000
+    let startTime = js"performance.now()".to(float)
+    
+    for i in 0..<iterations:
+      # Simple JS interop operation
+      discard js"Math.random()".to(float)
+    
+    let endTime = js"performance.now()".to(float)
+    return endTime - startTime
+  
+  proc testWebWorkerSupport(): Future[bool] {.async.} =
+    ## Test Web Worker support
+    try:
+      let workerCode = """
+        self.onmessage = function(e) {
+          let result = e.data * 2;
+          self.postMessage(result);
+        };
+      """
+      
+      let blob = js"new Blob([workerCode], {type: 'application/javascript'})"
+      let workerUrl = js"URL.createObjectURL(blob)"
+      let worker = js"new Worker(workerUrl)"
+      
+      let promise = newPromise() do (resolve: proc(success: bool)):
+        worker.onmessage = proc(e: JsObject) =
+          let result = e.data.to(int)
+          resolve(result == 84)  # 42 * 2
+        
+        worker.onerror = proc(e: JsObject) =
+          resolve(false)
+        
+        # Send test data
+        worker.postMessage(42)
+      
+      let result = await promise
+      worker.terminate()
+      js"URL.revokeObjectURL(workerUrl)"
+      
+      return result
+    except:
+      return false
+
+suite "WebAssembly Platform Tests for $MODULE_NAME":
+  
+  setup:
+    when defined(js):
+      let browserInfo = getBrowserInfo()
+      let perfMetrics = getPerformanceMetrics()
+      let apiSupport = checkWebAPISupport()
+      
+      console.log("WebAssembly Browser Environment:")
+      console.log(fmt"  Browser: {browserInfo.name} {browserInfo.version}")
+      console.log(fmt"  WebAssembly Support: {browserInfo.supportsWebAssembly}")
+      console.log(fmt"  SharedArrayBuffer: {browserInfo.supportsSharedArrayBuffer}")
+      console.log(fmt"  OffscreenCanvas: {browserInfo.supportsOffscreen}")
+      console.log(fmt"  Memory Usage: {perfMetrics.memoryUsage div 1024} KB")
+      console.log(fmt"  Heap Size: {perfMetrics.heapSize div 1024} KB")
+      
+      console.log("Web API Support:")
+      console.log(fmt"  localStorage: {apiSupport.localStorage}")
+      console.log(fmt"  IndexedDB: {apiSupport.indexedDB}")
+      console.log(fmt"  Web Workers: {apiSupport.webWorkers}")
+      console.log(fmt"  WebGL: {apiSupport.webGL}")
+      console.log(fmt"  Fetch API: {apiSupport.fetch}")
+  
+  test "$MODULE_NAME WebAssembly DOM integration":
+    when defined(js):
+      let domWorking = testDOMManipulation()
+      check domWorking, "DOM manipulation should work"
+      
+      # Test module DOM integration
+      when compiles($MODULE.manipulateDOM):
+        let testElement = document.createElement("div")
+        testElement.id = "module-test"
+        document.body.appendChild(testElement)
+        defer: document.body.removeChild(testElement)
+        
+        let result = $MODULE.manipulateDOM(testElement)
+        check result.success, "Module should successfully manipulate DOM"
+      
+      # Test event handling
+      when compiles($MODULE.attachEventListener):
+        let button = document.createElement("button")
+        button.id = "test-button"
+        document.body.appendChild(button)
+        defer: document.body.removeChild(button)
+        
+        var eventFired = false
+        $MODULE.attachEventListener(button, "click") do:
+          eventFired = true
+        
+        # Simulate click
+        let clickEvent = js"new Event('click')"
+        button.dispatchEvent(clickEvent)
+        
+        check eventFired, "Event listener should fire"
+  
+  test "$MODULE_NAME WebAssembly async operations":
+    when defined(js):
+      proc testAsync() {.async.} =
+        let jsAsyncWorking = await testAsyncJavaScript()
+        check jsAsyncWorking, "JavaScript async operations should work"
+        
+        # Test module async operations
+        when compiles($MODULE.performAsyncOperation):
+          let result = await $MODULE.performAsyncOperation()
+          check result.completed, "Module async operation should complete"
+          check result.data.len > 0, "Async operation should return data"
+        
+        # Test Promise integration
+        when compiles($MODULE.createPromise):
+          let promise = $MODULE.createPromise("test_data")
+          let promiseResult = await promise
+          check promiseResult == "test_data", "Promise should resolve with correct data"
+      
+      waitFor testAsync()
+  
+  test "$MODULE_NAME WebAssembly performance":
+    when defined(js):
+      let browserInfo = getBrowserInfo()
+      let jsInteropTime = measureJSInteropPerformance()
+      
+      console.log(fmt"JS interop performance: {jsInteropTime:.2f}ms for 10000 operations")
+      
+      # Test module performance
+      let iterations = 1000
+      let startTime = js"performance.now()".to(float)
+      
+      for i in 0..<iterations:
+        when compiles($MODULE.performComputeIntensiveOperation):
+          discard $MODULE.performComputeIntensiveOperation(i)
+        else:
+          # Default compute operation
+          discard i * i + i
+      
+      let endTime = js"performance.now()".to(float)
+      let moduleTime = endTime - startTime
+      
+      console.log(fmt"Module performance: {moduleTime:.2f}ms for {iterations} operations")
+      
+      # Performance should be reasonable
+      check moduleTime < 1000, "Module operations should complete in under 1 second"
+      
+      # Compare with pure JS performance
+      let jsStartTime = js"performance.now()".to(float)
+      for i in 0..<iterations:
+        discard js"Math.pow(@, 2) + @".to(int, i, i)
+      let jsEndTime = js"performance.now()".to(float)
+      let jsTime = jsEndTime - jsStartTime
+      
+      console.log(fmt"Pure JS performance: {jsTime:.2f}ms for {iterations} operations")
+      
+      # WebAssembly should be competitive with JS for compute tasks
+      let performanceRatio = moduleTime / jsTime
+      console.log(fmt"Performance ratio (WASM/JS): {performanceRatio:.2f}")
+  
+  test "$MODULE_NAME WebAssembly memory management":
+    when defined(js):
+      let initialMetrics = getPerformanceMetrics()
+      console.log(fmt"Initial memory: {initialMetrics.memoryUsage div 1024} KB")
+      
+      # Test memory allocation
+      when compiles($MODULE.allocateMemory):
+        let memorySize = 1024 * 1024  # 1MB
+        let allocated = $MODULE.allocateMemory(memorySize)
+        check allocated.success, "Memory allocation should succeed"
+        
+        let afterAllocation = getPerformanceMetrics()
+        console.log(fmt"After allocation: {afterAllocation.memoryUsage div 1024} KB")
+        
+        # Clean up
+        when compiles($MODULE.freeMemory):
+          $MODULE.freeMemory(allocated.pointer)
+        
+        # Force garbage collection
+        js"if (window.gc) window.gc();"
+        
+        let afterCleanup = getPerformanceMetrics()
+        console.log(fmt"After cleanup: {afterCleanup.memoryUsage div 1024} KB")
+      
+      # Test memory limits
+      let memoryLimit = initialMetrics.jsHeapSizeLimit
+      console.log(fmt"JS heap size limit: {memoryLimit div (1024*1024)} MB")
+      
+      # Module should respect memory limits
+      when compiles($MODULE.checkMemoryLimits):
+        let withinLimits = $MODULE.checkMemoryLimits()
+        check withinLimits, "Module should operate within memory limits"
+  
+  test "$MODULE_NAME WebAssembly JavaScript interop":
+    when defined(js):
+      # Test data exchange with JavaScript
+      let jsObject = js"{name: 'test', value: 42, items: [1, 2, 3]}"
+      
+      when compiles($MODULE.processJavaScriptObject):
+        let result = $MODULE.processJavaScriptObject(jsObject)
+        check result.isValid, "Should process JavaScript object"
+        check result.data.hasKey("processed"), "Should add processed flag"
+      
+      # Test function calls from JS
+      when compiles($MODULE.exposeToJavaScript):
+        let jsFunction = $MODULE.exposeToJavaScript("testFunction")
+        check jsFunction != nil, "Should expose function to JavaScript"
+        
+        # Call from JavaScript
+        let callResult = js"jsFunction('test_parameter')".to(string)
+        check callResult.len > 0, "JavaScript should be able to call Nim function"
+      
+      # Test callback mechanisms
+      when compiles($MODULE.registerCallback):
+        var callbackCalled = false
+        $MODULE.registerCallback("test_event") do (data: JsObject):
+          callbackCalled = true
+          console.log("Callback called with data:", data)
+        
+        # Trigger callback from JS
+        js"setTimeout(() => { if (window.triggerTestEvent) window.triggerTestEvent({test: true}); }, 10);"
+        
+        # Wait a bit for async callback
+        await sleepAsync(50)
+        
+        # Note: callback may not be called if event system isn't set up
+        console.log(fmt"Callback was called: {callbackCalled}")
+  
+  test "$MODULE_NAME WebAssembly storage integration":
+    when defined(js):
+      let apiSupport = checkWebAPISupport()
+      
+      if apiSupport.localStorage:
+        let localStorageWorking = testLocalStorage()
+        check localStorageWorking, "localStorage should work"
+        
+        # Test module storage operations
+        when compiles($MODULE.saveToLocalStorage):
+          let testData = """{"key": "value", "number": 123}"""
+          let saved = $MODULE.saveToLocalStorage("test_key", testData)
+          check saved.success, "Should save to localStorage"
+          
+          when compiles($MODULE.loadFromLocalStorage):
+            let loaded = $MODULE.loadFromLocalStorage("test_key")
+            check loaded == testData, "Should load from localStorage"
+            
+            # Clean up
+            window.localStorage.removeItem("test_key")
+      
+      # Test IndexedDB if available
+      if apiSupport.indexedDB:
+        when compiles($MODULE.useIndexedDB):
+          proc testIndexedDB() {.async.} =
+            let dbResult = await $MODULE.useIndexedDB("test_db")
+            check dbResult.success, "Should work with IndexedDB"
+          
+          waitFor testIndexedDB()
+  
+  test "$MODULE_NAME WebAssembly canvas integration":
+    when defined(js):
+      let apiSupport = checkWebAPISupport()
+      
+      if apiSupport.canvas:
+        let canvas = createTestCanvas()
+        document.body.appendChild(canvas)
+        defer: document.body.removeChild(canvas)
+        
+        # Test canvas operations
+        when compiles($MODULE.drawOnCanvas):
+          let drawResult = $MODULE.drawOnCanvas(canvas)
+          check drawResult.success, "Should draw on canvas"
+          
+          # Test canvas data extraction
+          when compiles($MODULE.getCanvasData):
+            let imageData = $MODULE.getCanvasData(canvas)
+            check imageData.len > 0, "Should extract canvas data"
+        
+        # Test WebGL if available
+        if apiSupport.webGL:
+          when compiles($MODULE.useWebGL):
+            let webglResult = $MODULE.useWebGL(canvas)
+            check webglResult.success or webglResult.error == "WebGL not supported", 
+                  "WebGL should work or gracefully fail"
+  
+  test "$MODULE_NAME WebAssembly worker integration":
+    when defined(js):
+      let apiSupport = checkWebAPISupport()
+      
+      if apiSupport.webWorkers:
+        let workerSupported = await testWebWorkerSupport()
+        check workerSupported, "Web Workers should work"
+        
+        # Test module worker integration
+        when compiles($MODULE.createWebWorker):
+          let worker = $MODULE.createWebWorker("test_worker")
+          check worker.isValid, "Should create web worker"
+          
+          when compiles($MODULE.sendToWorker):
+            let message = """{"command": "process", "data": [1, 2, 3, 4, 5]}"""
+            let sent = $MODULE.sendToWorker(worker, message)
+            check sent.success, "Should send message to worker"
+            
+            # Wait for response
+            await sleepAsync(100)
+            
+            when compiles($MODULE.getWorkerResult):
+              let result = $MODULE.getWorkerResult(worker)
+              check result.hasResult, "Should receive worker result"
+          
+          # Clean up worker
+          when compiles($MODULE.terminateWorker):
+            $MODULE.terminateWorker(worker)
+  
+  test "$MODULE_NAME WebAssembly error handling":
+    when defined(js):
+      # Test JavaScript exception handling
+      when compiles($MODULE.handleJavaScriptError):
+        try:
+          js"throw new Error('Test error')"
+        except JsError as e:
+          let handled = $MODULE.handleJavaScriptError(e.msg)
+          check handled.success, "Should handle JavaScript errors gracefully"
+      
+      # Test WebAssembly-specific errors
+      when compiles($MODULE.handleWasmError):
+        # Simulate WASM error
+        let wasmError = "WebAssembly.RuntimeError: out of bounds memory access"
+        let handled = $MODULE.handleWasmError(wasmError)
+        check handled.recovery.len > 0, "Should provide error recovery information"
+      
+      # Test resource cleanup on errors
+      when compiles($MODULE.testErrorCleanup):
+        let cleanupResult = $MODULE.testErrorCleanup()
+        check cleanupResult.resourcesReleased, "Should clean up resources on error"
+  
+  test "$MODULE_NAME WebAssembly cross-origin handling":
+    when defined(js):
+      # Test CORS handling
+      when compiles($MODULE.handleCORS):
+        let corsResult = $MODULE.handleCORS("https://api.example.com")
+        # May fail due to CORS restrictions, which is expected
+        console.log(fmt"CORS handling result: {corsResult.success}")
+      
+      # Test same-origin operations
+      when compiles($MODULE.performSameOriginOperation):
+        let sameOriginResult = $MODULE.performSameOriginOperation()
+        check sameOriginResult.success, "Same-origin operations should work"
+      
+      # Test CSP compliance
+      when compiles($MODULE.checkCSPCompliance):
+        let cspCompliant = $MODULE.checkCSPCompliance()
+        check cspCompliant, "Should comply with Content Security Policy"

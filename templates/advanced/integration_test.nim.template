@@ -1,0 +1,381 @@
+import unittest, asyncdispatch, json, httpclient, os, times, strutils, net
+import $MODULE
+
+# Integration test utilities
+type
+  TestEnvironment = object
+    dbConnection: string
+    apiBaseUrl: string
+    testDataDir: string
+    tempFiles: seq[string]
+    httpClient: HttpClient
+    
+  ServiceHealth = object
+    database: bool
+    externalApi: bool
+    fileSystem: bool
+    network: bool
+
+var testEnv: TestEnvironment
+
+proc setupTestEnvironment(): TestEnvironment =
+  ## Initialize test environment with necessary resources
+  result.dbConnection = "test_database.db"
+  result.apiBaseUrl = "https://jsonplaceholder.typicode.com"  # Test API
+  result.testDataDir = "test_data"
+  result.tempFiles = @[]
+  result.httpClient = newHttpClient(timeout = 5000)
+  
+  # Create test data directory
+  if not dirExists(result.testDataDir):
+    createDir(result.testDataDir)
+  
+  echo "Test environment initialized"
+
+proc cleanupTestEnvironment(env: var TestEnvironment) =
+  ## Clean up test environment resources
+  
+  # Close HTTP client
+  if env.httpClient != nil:
+    env.httpClient.close()
+  
+  # Remove temporary files
+  for file in env.tempFiles:
+    if fileExists(file):
+      removeFile(file)
+  
+  # Remove test data directory
+  if dirExists(env.testDataDir):
+    removeDir(env.testDataDir)
+  
+  echo "Test environment cleaned up"
+
+proc checkServiceHealth(): ServiceHealth =
+  ## Check health of external services
+  result.database = true  # Placeholder - implement actual DB health check
+  result.fileSystem = dirExists(".")
+  
+  # Check external API
+  try:
+    let client = newHttpClient(timeout = 3000)
+    defer: client.close()
+    let response = client.get(testEnv.apiBaseUrl & "/posts/1")
+    result.externalApi = response.status == Http200
+  except:
+    result.externalApi = false
+  
+  # Check network connectivity
+  try:
+    let socket = newSocket()
+    defer: socket.close()
+    socket.connect("8.8.8.8", Port(53), timeout = 3000)
+    result.network = true
+  except:
+    result.network = false
+
+proc createTestData(env: TestEnvironment): tuple[jsonFile, csvFile, textFile: string] =
+  ## Create test data files
+  let jsonFile = env.testDataDir / "test.json"
+  let csvFile = env.testDataDir / "test.csv"
+  let textFile = env.testDataDir / "test.txt"
+  
+  # Create JSON test data
+  let jsonData = %*{
+    "users": [
+      {"id": 1, "name": "Alice", "email": "alice@example.com"},
+      {"id": 2, "name": "Bob", "email": "bob@example.com"}
+    ],
+    "metadata": {
+      "version": "1.0",
+      "created": $now()
+    }
+  }
+  writeFile(jsonFile, $jsonData)
+  
+  # Create CSV test data
+  let csvData = """id,name,email,age
+1,Alice,alice@example.com,25
+2,Bob,bob@example.com,30
+3,Carol,carol@example.com,35"""
+  writeFile(csvFile, csvData)
+  
+  # Create text test data
+  let textData = """This is a test file.
+It contains multiple lines.
+Line 3: Special characters: !@#$%^&*()
+Line 4: Unicode: 🎉 测试 русский"""
+  writeFile(textFile, textData)
+  
+  result = (jsonFile, csvFile, textFile)
+
+suite "Integration Tests for $MODULE_NAME":
+  
+  setup:
+    testEnv = setupTestEnvironment()
+    
+    let health = checkServiceHealth()
+    echo "Service Health Check:"
+    echo fmt"  Database: {health.database}"
+    echo fmt"  External API: {health.externalApi}"
+    echo fmt"  File System: {health.fileSystem}"
+    echo fmt"  Network: {health.network}"
+  
+  teardown:
+    cleanupTestEnvironment(testEnv)
+  
+  test "$MODULE_NAME database integration":
+    # Test database operations
+    skip("Database integration test - implement based on actual DB requirements")
+    
+    # Example database integration test:
+    # let db = open(testEnv.dbConnection, "", "", "")
+    # defer: db.close()
+    # 
+    # # Test connection
+    # check db != nil
+    # 
+    # # Test data insertion
+    # db.exec(sql"CREATE TABLE IF NOT EXISTS test_table (id INTEGER PRIMARY KEY, name TEXT)")
+    # db.exec(sql"INSERT INTO test_table (name) VALUES (?)", "test_name")
+    # 
+    # # Test data retrieval
+    # let result = db.getRow(sql"SELECT name FROM test_table WHERE id = 1")
+    # check result[0] == "test_name"
+    # 
+    # # Test module integration with database
+    # when compiles($MODULE.processDatabase(db)):
+    #   let moduleResult = $MODULE.processDatabase(db)
+    #   check moduleResult.success
+  
+  test "$MODULE_NAME file system integration":
+    # Test file operations
+    let (jsonFile, csvFile, textFile) = createTestData(testEnv)
+    
+    # Verify test files were created
+    check fileExists(jsonFile)
+    check fileExists(csvFile)
+    check fileExists(textFile)
+    
+    # Test module file processing
+    when compiles($MODULE.processFile):
+      # Test JSON file processing
+      let jsonResult = $MODULE.processFile(jsonFile)
+      check jsonResult.success
+      
+      # Test CSV file processing
+      let csvResult = $MODULE.processFile(csvFile)
+      check csvResult.success
+      
+      # Test text file processing
+      let textResult = $MODULE.processFile(textFile)
+      check textResult.success
+    
+    # Test file creation by module
+    when compiles($MODULE.createOutputFile):
+      let outputFile = testEnv.testDataDir / "output.txt"
+      $MODULE.createOutputFile(outputFile, "test content")
+      
+      check fileExists(outputFile)
+      check readFile(outputFile) == "test content"
+      
+      testEnv.tempFiles.add(outputFile)
+  
+  test "$MODULE_NAME HTTP API integration":
+    # Test external API calls
+    let health = checkServiceHealth()
+    
+    if not health.externalApi:
+      skip("External API not available")
+      return
+    
+    try:
+      # Test GET request
+      let response = testEnv.httpClient.get(testEnv.apiBaseUrl & "/posts/1")
+      check response.status == Http200
+      
+      let jsonResponse = parseJson(response.body)
+      check jsonResponse.hasKey("id")
+      check jsonResponse.hasKey("title")
+      
+      # Test module API integration
+      when compiles($MODULE.fetchFromApi):
+        let moduleResult = $MODULE.fetchFromApi(testEnv.apiBaseUrl & "/posts/1")
+        check moduleResult.success
+        check moduleResult.data.len > 0
+      
+      # Test POST request (to test API)
+      let postData = %*{"title": "test", "body": "test body", "userId": 1}
+      let postResponse = testEnv.httpClient.request(
+        testEnv.apiBaseUrl & "/posts",
+        httpMethod = HttpPost,
+        body = $postData,
+        headers = newHttpHeaders({"Content-Type": "application/json"})
+      )
+      check postResponse.status == HttpStatus(201)  # Created
+      
+    except HttpRequestError as e:
+      echo fmt"HTTP request failed: {e.msg}"
+      fail("HTTP integration test failed")
+    except JsonParsingError as e:
+      echo fmt"JSON parsing failed: {e.msg}"
+      fail("JSON parsing in integration test failed")
+  
+  test "$MODULE_NAME async operations integration":
+    # Test async workflows
+    proc testAsyncWorkflow() {.async.} =
+      # Test async module operations
+      when compiles($MODULE.performAsyncOperation):
+        let result = await $MODULE.performAsyncOperation()
+        check result.completed
+        check result.data.len > 0
+      
+      # Test concurrent operations
+      when compiles($MODULE.processMultipleItems):
+        let items = @["item1", "item2", "item3"]
+        let futures = items.mapIt($MODULE.processItemAsync(it))
+        
+        let results = await all(futures)
+        check results.len == 3
+        check results.allIt(it.success)
+      
+      # Test async error handling
+      when compiles($MODULE.operationThatMayFail):
+        try:
+          discard await $MODULE.operationThatMayFail()
+        except Exception as e:
+          echo fmt"Expected async exception: {e.msg}"
+    
+    waitFor testAsyncWorkflow()
+  
+  test "$MODULE_NAME configuration integration":
+    # Test configuration file integration
+    let configFile = testEnv.testDataDir / "test_config.json"
+    let configData = %*{
+      "database": {
+        "connection": testEnv.dbConnection,
+        "timeout": 30
+      },
+      "api": {
+        "baseUrl": testEnv.apiBaseUrl,
+        "timeout": 5000
+      },
+      "features": {
+        "enableLogging": true,
+        "debugMode": false
+      }
+    }
+    writeFile(configFile, $configData)
+    testEnv.tempFiles.add(configFile)
+    
+    # Test module configuration loading
+    when compiles($MODULE.loadConfiguration):
+      let config = $MODULE.loadConfiguration(configFile)
+      check config.isValid()
+      check config.database.connection == testEnv.dbConnection
+    
+    # Test configuration validation
+    when compiles($MODULE.validateConfiguration):
+      let isValid = $MODULE.validateConfiguration(configFile)
+      check isValid
+  
+  test "$MODULE_NAME error handling integration":
+    # Test error scenarios and recovery
+    
+    # Test file not found error
+    when compiles($MODULE.processFile):
+      expect(IOError):
+        discard $MODULE.processFile("non_existent_file.txt")
+    
+    # Test network error handling
+    when compiles($MODULE.fetchFromApi):
+      let result = $MODULE.fetchFromApi("http://non-existent-domain.invalid/api")
+      check not result.success
+      check result.error.len > 0
+    
+    # Test graceful degradation
+    when compiles($MODULE.operationWithFallback):
+      let result = $MODULE.operationWithFallback()
+      check result.success  # Should succeed even if primary method fails
+      if result.usedFallback:
+        echo "Fallback mechanism was used successfully"
+  
+  test "$MODULE_NAME performance integration":
+    # Test performance under realistic conditions
+    let iterations = 100
+    let startTime = cpuTime()
+    
+    # Simulate realistic workload
+    for i in 0..<iterations:
+      when compiles($MODULE.processRealisticWorkload):
+        let result = $MODULE.processRealisticWorkload()
+        check result.success
+      else:
+        # Default performance test
+        when compiles($MODULE.performOperation):
+          discard $MODULE.performOperation()
+    
+    let totalTime = cpuTime() - startTime
+    let avgTime = totalTime / iterations.float
+    
+    echo fmt"Performance Integration Test:"
+    echo fmt"  Total time: {totalTime:.3f}s"
+    echo fmt"  Average time per operation: {avgTime * 1000:.3f}ms"
+    echo fmt"  Throughput: {iterations.float / totalTime:.1f} ops/sec"
+    
+    # Performance assertions for integration scenarios
+    check avgTime < 0.1, "Average operation time should be under 100ms in integration context"
+    check totalTime < 30.0, "Total test time should be under 30 seconds"
+  
+  test "$MODULE_NAME data consistency integration":
+    # Test data consistency across operations
+    when compiles($MODULE.initializeData) and compiles($MODULE.processData) and compiles($MODULE.validateData):
+      # Initialize test data
+      $MODULE.initializeData()
+      
+      # Process data multiple times
+      for i in 0..<10:
+        $MODULE.processData(fmt"test_data_{i}")
+      
+      # Validate data consistency
+      let isConsistent = $MODULE.validateData()
+      check isConsistent, "Data should remain consistent after multiple operations"
+    
+    # Test concurrent data access
+    when compiles($MODULE.concurrentDataAccess):
+      proc concurrentTest() {.async.} =
+        let futures = newSeq[Future[bool]](5)
+        for i in 0..<5:
+          futures[i] = $MODULE.concurrentDataAccess(i)
+        
+        let results = await all(futures)
+        check results.allIt(it), "All concurrent operations should succeed"
+      
+      waitFor concurrentTest()
+  
+  test "$MODULE_NAME end-to-end workflow":
+    # Test complete workflow from input to output
+    let workflowStartTime = cpuTime()
+    
+    # Step 1: Prepare input data
+    let inputData = createTestData(testEnv)
+    
+    # Step 2: Process data through module pipeline
+    when compiles($MODULE.runCompleteWorkflow):
+      let workflowResult = $MODULE.runCompleteWorkflow(
+        inputFile = inputData.jsonFile,
+        outputDir = testEnv.testDataDir
+      )
+      
+      check workflowResult.success, "Complete workflow should succeed"
+      check workflowResult.outputFiles.len > 0, "Workflow should produce output files"
+      
+      # Verify output files exist and are valid
+      for outputFile in workflowResult.outputFiles:
+        check fileExists(outputFile), fmt"Output file should exist: {outputFile}"
+        testEnv.tempFiles.add(outputFile)
+    
+    let workflowTime = cpuTime() - workflowStartTime
+    echo fmt"End-to-end workflow completed in {workflowTime:.3f}s"
+    
+    # Workflow should complete in reasonable time
+    check workflowTime < 10.0, "End-to-end workflow should complete within 10 seconds"

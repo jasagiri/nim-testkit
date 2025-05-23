@@ -1,0 +1,4 @@
+nimTitle	test_guard	test_guard.html	module test_guard		0
+nim	getProjectRootDir	test_guard.html#getProjectRootDir	proc getProjectRootDir(): string		8
+nim	getLatestModTime	test_guard.html#getLatestModTime,string,string	proc getLatestModTime(dir: string; pattern = "*.nim"): Time		19
+nim	runTestGuard	test_guard.html#runTestGuard	proc runTestGuard()		48

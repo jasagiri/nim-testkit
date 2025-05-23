@@ -1,0 +1,427 @@
+import unittest, asyncdispatch, json, times, strutils
+import $MODULE
+
+# Mobile platform testing utilities
+when defined(ios) or defined(android):
+  
+  type
+    DeviceInfo = object
+      name: string
+      version: string
+      memory: int
+      isDevice: bool
+      screenSize: tuple[width: int, height: int]
+      density: float
+    
+    TouchEvent = object
+      x: float
+      y: float
+      pressure: float
+      timestamp: float
+    
+    SensorData = object
+      accelerometer: tuple[x, y, z: float]
+      gyroscope: tuple[x, y, z: float]
+      magnetometer: tuple[x, y, z: float]
+      orientation: float
+    
+    NetworkState = enum
+      nsOffline = "offline"
+      nsWifi = "wifi"
+      nsCellular = "cellular"
+      nsUnknown = "unknown"
+    
+    BatteryInfo = object
+      level: float
+      isCharging: bool
+      estimatedTimeRemaining: int
+  
+  proc getDeviceInfo(): DeviceInfo =
+    ## Get device information
+    when defined(ios):
+      result = DeviceInfo(
+        name: "iOS Device",
+        version: "15.0",  # Placeholder - would query actual iOS version
+        memory: 4096,     # MB
+        isDevice: not defined(simulator),
+        screenSize: (width: 375, height: 812),  # iPhone X size as default
+        density: 3.0
+      )
+    elif defined(android):
+      result = DeviceInfo(
+        name: "Android Device",
+        version: "12.0",  # Placeholder - would query actual Android version
+        memory: 8192,     # MB
+        isDevice: not defined(emulator),
+        screenSize: (width: 360, height: 800),  # Common Android size
+        density: 2.5
+      )
+  
+  proc simulateTouchInput(x, y: float, pressure: float = 1.0): TouchEvent =
+    ## Simulate touch input
+    result = TouchEvent(
+      x: x,
+      y: y,
+      pressure: pressure,
+      timestamp: cpuTime()
+    )
+  
+  proc readSensorData(): SensorData =
+    ## Read sensor data (simulated for testing)
+    result = SensorData(
+      accelerometer: (x: 0.1, y: 0.2, z: 9.8),  # Gravity
+      gyroscope: (x: 0.0, y: 0.0, z: 0.0),     # At rest
+      magnetometer: (x: 23.0, y: -15.0, z: 45.0), # Magnetic field
+      orientation: 0.0  # Portrait
+    )
+  
+  proc getNetworkState(): NetworkState =
+    ## Get current network state
+    # Placeholder implementation
+    when defined(ios):
+      nsWifi  # Assume WiFi on iOS simulator
+    elif defined(android):
+      nsCellular  # Assume cellular on Android emulator
+    else:
+      nsUnknown
+  
+  proc getBatteryInfo(): BatteryInfo =
+    ## Get battery information
+    result = BatteryInfo(
+      level: 0.75,  # 75%
+      isCharging: false,
+      estimatedTimeRemaining: 480  # 8 hours in minutes
+    )
+  
+  proc testMemoryPressure(): bool =
+    ## Test memory pressure handling
+    let initialMem = getOccupiedMem()
+    
+    # Allocate memory to simulate pressure
+    var testData: seq[byte] = newSeq[byte](100_000_000)  # 100MB
+    for i in 0..<testData.len:
+      testData[i] = byte(i mod 256)
+    
+    let peakMem = getOccupiedMem()
+    
+    # Clean up
+    testData = @[]
+    GC_fullCollect()
+    
+    let finalMem = getOccupiedMem()
+    
+    # Memory should be released
+    result = finalMem < peakMem
+  
+  proc testBackgroundTasking(): bool =
+    ## Test background task capabilities
+    # Simulate background task
+    result = true  # Placeholder
+
+suite "Mobile Platform Tests for $MODULE_NAME":
+  
+  setup:
+    when defined(ios) or defined(android):
+      let deviceInfo = getDeviceInfo()
+      let platformName = when defined(ios): "iOS" else: "Android"
+      
+      echo fmt"{platformName} Device Information:"
+      echo fmt"  Name: {deviceInfo.name}"
+      echo fmt"  Version: {deviceInfo.version}"
+      echo fmt"  Memory: {deviceInfo.memory} MB"
+      echo fmt"  Running on device: {deviceInfo.isDevice}"
+      echo fmt"  Screen size: {deviceInfo.screenSize.width}x{deviceInfo.screenSize.height}"
+      echo fmt"  Screen density: {deviceInfo.density}x"
+  
+  test "$MODULE_NAME mobile memory management":
+    when defined(ios) or defined(android):
+      let deviceInfo = getDeviceInfo()
+      let memBefore = getOccupiedMem()
+      
+      echo fmt"Initial memory usage: {memBefore div (1024*1024)} MB"
+      
+      # Test memory allocation with mobile constraints
+      let maxAllocation = if deviceInfo.memory < 2048: 10_000_000 else: 50_000_000
+      var data: seq[byte] = newSeq[byte](maxAllocation)
+      
+      for i in 0..<min(data.len, 1000000):  # Don't initialize too much
+        data[i] = byte(i mod 256)
+      
+      let memAfter = getOccupiedMem()
+      let memUsed = memAfter - memBefore
+      
+      echo fmt"Memory used: {memUsed div (1024*1024)} MB"
+      
+      # Mobile devices have stricter memory limits
+      let memoryLimit = deviceInfo.memory * 1024 * 1024 div 4  # 25% of device memory
+      check memUsed < memoryLimit, "Memory usage should be within mobile limits"
+      
+      # Test memory pressure handling
+      when compiles($MODULE.handleMemoryWarning):
+        $MODULE.handleMemoryWarning()
+      
+      # Clean up
+      data = @[]
+      GC_fullCollect()
+      
+      let memFinal = getOccupiedMem()
+      echo fmt"Final memory usage: {memFinal div (1024*1024)} MB"
+      
+      # Memory should be released efficiently
+      check memFinal <= memBefore + (1024 * 1024), "Memory should be released after cleanup"
+  
+  test "$MODULE_NAME mobile UI responsiveness":
+    when defined(ios) or defined(android):
+      # Test that operations don't block the main thread for too long
+      let maxBlockTime = 0.016  # 16ms for 60fps
+      
+      proc quickOperation() =
+        when compiles($MODULE.performQuickOperation):
+          discard $MODULE.performQuickOperation()
+        else:
+          # Default quick operation
+          for i in 0..<1000:
+            discard i * i
+      
+      let startTime = cpuTime()
+      quickOperation()
+      let endTime = cpuTime()
+      
+      let executionTime = endTime - startTime
+      echo fmt"Quick operation took: {executionTime * 1000:.2f}ms"
+      
+      check executionTime < maxBlockTime, "Operations should not block UI thread"
+      
+      # Test async operations for longer tasks
+      when compiles($MODULE.performLongOperationAsync):
+        proc testAsyncOperation() {.async.} =
+          let startAsync = cpuTime()
+          let result = await $MODULE.performLongOperationAsync()
+          let endAsync = cpuTime()
+          
+          echo fmt"Async operation took: {(endAsync - startAsync) * 1000:.2f}ms"
+          check result.success, "Async operation should succeed"
+        
+        waitFor testAsyncOperation()
+  
+  test "$MODULE_NAME mobile touch input handling":
+    when defined(ios) or defined(android):
+      let deviceInfo = getDeviceInfo()
+      let screenWidth = deviceInfo.screenSize.width.float
+      let screenHeight = deviceInfo.screenSize.height.float
+      
+      # Test various touch scenarios
+      let touchEvents = @[
+        simulateTouchInput(screenWidth / 2, screenHeight / 2),  # Center tap
+        simulateTouchInput(0, 0),                               # Top-left corner
+        simulateTouchInput(screenWidth, screenHeight),          # Bottom-right corner
+        simulateTouchInput(screenWidth / 2, 0, 0.5),           # Light pressure
+        simulateTouchInput(screenWidth / 2, screenHeight, 1.0)  # Full pressure
+      ]
+      
+      for i, event in touchEvents:
+        when compiles($MODULE.handleTouchInput):
+          let result = $MODULE.handleTouchInput(event.x, event.y, event.pressure)
+          check result.success, fmt"Touch event {i} should be handled successfully"
+          
+          # Validate touch coordinates are within screen bounds
+          check event.x >= 0 and event.x <= screenWidth, "Touch X coordinate should be valid"
+          check event.y >= 0 and event.y <= screenHeight, "Touch Y coordinate should be valid"
+      
+      # Test gesture recognition
+      when compiles($MODULE.recognizeGesture):
+        let swipeGesture = @[
+          (x: screenWidth / 4, y: screenHeight / 2),
+          (x: screenWidth * 3 / 4, y: screenHeight / 2)
+        ]
+        
+        let gesture = $MODULE.recognizeGesture(swipeGesture)
+        check gesture == "swipe_right", "Should recognize right swipe gesture"
+  
+  test "$MODULE_NAME mobile sensor integration":
+    when defined(ios) or defined(android):
+      let sensorData = readSensorData()
+      
+      echo "Sensor Data:"
+      echo fmt"  Accelerometer: ({sensorData.accelerometer.x:.2f}, {sensorData.accelerometer.y:.2f}, {sensorData.accelerometer.z:.2f})"
+      echo fmt"  Gyroscope: ({sensorData.gyroscope.x:.2f}, {sensorData.gyroscope.y:.2f}, {sensorData.gyroscope.z:.2f})"
+      echo fmt"  Magnetometer: ({sensorData.magnetometer.x:.2f}, {sensorData.magnetometer.y:.2f}, {sensorData.magnetometer.z:.2f})"
+      echo fmt"  Orientation: {sensorData.orientation:.2f}°"
+      
+      # Test sensor data processing
+      when compiles($MODULE.processSensorData):
+        let result = $MODULE.processSensorData(
+          sensorData.accelerometer,
+          sensorData.gyroscope,
+          sensorData.magnetometer
+        )
+        check result.isValid, "Sensor data processing should succeed"
+        
+        # Validate accelerometer shows gravity
+        let gravityMagnitude = sqrt(
+          sensorData.accelerometer.x * sensorData.accelerometer.x +
+          sensorData.accelerometer.y * sensorData.accelerometer.y +
+          sensorData.accelerometer.z * sensorData.accelerometer.z
+        )
+        check gravityMagnitude > 9.0 and gravityMagnitude < 10.5, "Accelerometer should detect gravity"
+      
+      # Test motion detection
+      when compiles($MODULE.detectMotion):
+        let isMoving = $MODULE.detectMotion(sensorData.accelerometer, sensorData.gyroscope)
+        echo fmt"Device is moving: {isMoving}"
+  
+  test "$MODULE_NAME mobile network handling":
+    when defined(ios) or defined(android):
+      let networkState = getNetworkState()
+      echo fmt"Network state: {networkState}"
+      
+      # Test network-aware operations
+      when compiles($MODULE.adaptToNetworkState):
+        let adaptation = $MODULE.adaptToNetworkState(networkState)
+        
+        case networkState:
+        of nsWifi:
+          check adaptation.allowsLargeDownloads, "WiFi should allow large downloads"
+          check adaptation.qualityLevel == "high", "WiFi should use high quality"
+        of nsCellular:
+          check not adaptation.allowsLargeDownloads, "Cellular should restrict large downloads"
+          check adaptation.qualityLevel == "medium", "Cellular should use medium quality"
+        of nsOffline:
+          check adaptation.usesCachedContent, "Offline should use cached content"
+        else:
+          discard
+      
+      # Test offline capability
+      when compiles($MODULE.canWorkOffline):
+        let offlineCapable = $MODULE.canWorkOffline()
+        check offlineCapable, "Module should support offline operation"
+      
+      # Test data synchronization
+      when compiles($MODULE.syncWhenOnline):
+        if networkState != nsOffline:
+          let syncResult = $MODULE.syncWhenOnline()
+          check syncResult.success, "Data sync should work when online"
+  
+  test "$MODULE_NAME mobile power efficiency":
+    when defined(ios) or defined(android):
+      let batteryInfo = getBatteryInfo()
+      echo fmt"Battery: {batteryInfo.level * 100:.0f}%, Charging: {batteryInfo.isCharging}"
+      
+      # Test power-efficient operations
+      let startTime = cpuTime()
+      let initialBatteryLevel = batteryInfo.level
+      
+      # Perform power-conscious operations
+      when compiles($MODULE.performEfficientOperation):
+        for i in 0..<100:
+          $MODULE.performEfficientOperation()
+      else:
+        # Default efficient operation
+        for i in 0..<100:
+          discard i mod 7  # Minimal computation
+      
+      let endTime = cpuTime()
+      let executionTime = endTime - startTime
+      
+      echo fmt"Power-efficient operations took: {executionTime * 1000:.2f}ms"
+      
+      # Should complete quickly to preserve battery
+      check executionTime < 0.1, "Power-efficient operations should be fast"
+      
+      # Test battery-aware behavior
+      when compiles($MODULE.adaptToBatteryLevel):
+        let lowBatteryMode = batteryInfo.level < 0.2
+        let adaptation = $MODULE.adaptToBatteryLevel(batteryInfo.level, lowBatteryMode)
+        
+        if lowBatteryMode:
+          check adaptation.reducedFrequency, "Should reduce frequency in low battery mode"
+          check adaptation.disableNonEssential, "Should disable non-essential features"
+  
+  test "$MODULE_NAME mobile lifecycle management":
+    when defined(ios) or defined(android):
+      # Test app lifecycle events
+      when compiles($MODULE.handleAppDidEnterBackground):
+        $MODULE.handleAppDidEnterBackground()
+        
+        # Verify background state
+        when compiles($MODULE.isInBackground):
+          check $MODULE.isInBackground(), "App should be in background state"
+      
+      when compiles($MODULE.handleAppWillEnterForeground):
+        $MODULE.handleAppWillEnterForeground()
+        
+        # Verify foreground state
+        when compiles($MODULE.isInForeground):
+          check $MODULE.isInForeground(), "App should be in foreground state"
+      
+      # Test background task handling
+      when compiles($MODULE.canPerformBackgroundTasks):
+        let canBackground = $MODULE.canPerformBackgroundTasks()
+        echo fmt"Can perform background tasks: {canBackground}"
+        
+        if canBackground:
+          when compiles($MODULE.performBackgroundTask):
+            let bgResult = $MODULE.performBackgroundTask()
+            check bgResult.completed, "Background task should complete"
+  
+  test "$MODULE_NAME mobile storage management":
+    when defined(ios) or defined(android):
+      # Test storage constraints
+      when compiles($MODULE.getAvailableStorage):
+        let availableSpace = $MODULE.getAvailableStorage()
+        echo fmt"Available storage: {availableSpace div (1024*1024)} MB"
+        
+        # Check storage limits
+        let minRequiredSpace = 50 * 1024 * 1024  # 50MB minimum
+        check availableSpace > minRequiredSpace, "Should have minimum required storage"
+      
+      # Test cache management
+      when compiles($MODULE.manageCacheSize):
+        let cacheSize = $MODULE.getCacheSize()
+        echo fmt"Current cache size: {cacheSize div (1024*1024)} MB"
+        
+        let maxCacheSize = 100 * 1024 * 1024  # 100MB max
+        if cacheSize > maxCacheSize:
+          $MODULE.clearCache()
+          let newCacheSize = $MODULE.getCacheSize()
+          check newCacheSize < cacheSize, "Cache should be reduced after clearing"
+      
+      # Test file system access
+      when compiles($MODULE.accessDocumentsDirectory):
+        let docsAccess = $MODULE.accessDocumentsDirectory()
+        check docsAccess.success, "Should have access to documents directory"
+      
+      when compiles($MODULE.accessTemporaryDirectory):
+        let tempAccess = $MODULE.accessTemporaryDirectory()
+        check tempAccess.success, "Should have access to temporary directory"
+  
+  test "$MODULE_NAME mobile security and permissions":
+    when defined(ios) or defined(android):
+      # Test permission requests
+      when compiles($MODULE.requestLocationPermission):
+        let locationPerm = $MODULE.requestLocationPermission()
+        echo fmt"Location permission: {locationPerm}"
+        # May be denied, which is acceptable for testing
+      
+      when compiles($MODULE.requestCameraPermission):
+        let cameraPerm = $MODULE.requestCameraPermission()
+        echo fmt"Camera permission: {cameraPerm}"
+      
+      # Test secure storage
+      when compiles($MODULE.storeSecurely):
+        let storeResult = $MODULE.storeSecurely("test_key", "test_value")
+        check storeResult.success, "Secure storage should work"
+        
+        when compiles($MODULE.retrieveSecurely):
+          let retrieved = $MODULE.retrieveSecurely("test_key")
+          check retrieved == "test_value", "Should retrieve stored value"
+      
+      # Test data protection
+      when compiles($MODULE.encryptSensitiveData):
+        let sensitiveData = "sensitive information"
+        let encrypted = $MODULE.encryptSensitiveData(sensitiveData)
+        check encrypted != sensitiveData, "Data should be encrypted"
+        
+        when compiles($MODULE.decryptSensitiveData):
+          let decrypted = $MODULE.decryptSensitiveData(encrypted)
+          check decrypted == sensitiveData, "Should decrypt to original data"

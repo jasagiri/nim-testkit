@@ -1,0 +1,9 @@
+nimTitle	jujutsu	jujutsu.html	module mcp/jujutsu		0
+nim	McpClient	jujutsu.html#McpClient	type McpClient		17
+nim	McpError	jujutsu.html#McpError	object McpError		21
+nim	newMcpClient	jujutsu.html#newMcpClient,string	proc newMcpClient(baseUrl: string = "http://localhost:8080/mcp"): McpClient		23
+nim	analyzeCommitRange	jujutsu.html#analyzeCommitRange,McpClient,string,string	proc analyzeCommitRange(client: McpClient; repoPath: string; commitRange: string): Future[\n    JsonNode]		30
+nim	proposeCommitDivision	jujutsu.html#proposeCommitDivision,McpClient,string,string	proc proposeCommitDivision(client: McpClient; repoPath: string; commitRange: string): Future[\n    JsonNode]		34
+nim	executeCommitDivision	jujutsu.html#executeCommitDivision,McpClient,string,JsonNode	proc executeCommitDivision(client: McpClient; repoPath: string; proposal: JsonNode): Future[\n    JsonNode]		38
+nim	automateCommitDivision	jujutsu.html#automateCommitDivision,McpClient,string,string	proc automateCommitDivision(client: McpClient; repoPath: string; commitRange: string): Future[\n    JsonNode]		42
+nim	isMcpJujutsuAvailable	jujutsu.html#isMcpJujutsuAvailable	proc isMcpJujutsuAvailable(): bool		47

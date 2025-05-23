@@ -1,0 +1,397 @@
+import unittest, os, osproc, strutils, times, posix
+import $MODULE
+
+# macOS-specific testing utilities
+when defined(macosx):
+  
+  proc getSystemVersion(): string =
+    ## Get macOS system version
+    let (output, exitCode) = execCmdEx("sw_vers -productVersion")
+    if exitCode == 0:
+      result = output.strip()
+    else:
+      result = "unknown"
+  
+  proc getBuildVersion(): string =
+    ## Get macOS build version
+    let (output, exitCode) = execCmdEx("sw_vers -buildVersion")
+    if exitCode == 0:
+      result = output.strip()
+    else:
+      result = "unknown"
+  
+  proc isRunningOnAppleSilicon(): bool =
+    ## Check if running on Apple Silicon (M1/M2/M3)
+    let (output, exitCode) = execCmdEx("uname -m")
+    result = exitCode == 0 and "arm64" in output
+  
+  proc getProcessorInfo(): tuple[model: string, cores: int, speed: string] =
+    ## Get processor information
+    let (modelOutput, _) = execCmdEx("sysctl -n machdep.cpu.brand_string")
+    let (coresOutput, _) = execCmdEx("sysctl -n hw.ncpu")
+    let (speedOutput, _) = execCmdEx("sysctl -n hw.cpufrequency_max")
+    
+    result.model = modelOutput.strip()
+    try:
+      result.cores = parseInt(coresOutput.strip())
+    except:
+      result.cores = 0
+    
+    result.speed = speedOutput.strip()
+  
+  proc getMemoryInfo(): tuple[total: int, available: int] =
+    ## Get memory information in bytes
+    let (totalOutput, _) = execCmdEx("sysctl -n hw.memsize")
+    let (availOutput, _) = execCmdEx("vm_stat | grep 'Pages free' | awk '{print $3}' | sed 's/\\.//'")
+    
+    try:
+      result.total = parseInt(totalOutput.strip())
+      let freePages = parseInt(availOutput.strip())
+      result.available = freePages * 4096  # Page size is typically 4KB
+    except:
+      result.total = 0
+      result.available = 0
+  
+  proc isSystemIntegrityProtectionEnabled(): bool =
+    ## Check if System Integrity Protection (SIP) is enabled
+    let (output, exitCode) = execCmdEx("csrutil status")
+    result = exitCode == 0 and "enabled" in output.toLower()
+  
+  proc getDiskInfo(path: string = "/"): tuple[total: int, free: int] =
+    ## Get disk space information
+    let (output, exitCode) = execCmdEx(fmt"df -b {path}")
+    if exitCode == 0:
+      let lines = output.splitLines()
+      if lines.len > 1:
+        let parts = lines[1].splitWhitespace()
+        if parts.len >= 4:
+          try:
+            result.total = parseInt(parts[1])
+            result.free = parseInt(parts[3])
+          except:
+            result.total = 0
+            result.free = 0
+  
+  proc testSpotlightSearch(query: string): seq[string] =
+    ## Test Spotlight search functionality
+    let (output, exitCode) = execCmdEx(fmt"mdfind '{query}' | head -10")
+    if exitCode == 0:
+      result = output.splitLines().filterIt(it.len > 0)
+    else:
+      result = @[]
+  
+  proc testKeychain(): bool =
+    ## Test keychain access
+    let (output, exitCode) = execCmdEx("security list-keychains")
+    result = exitCode == 0 and output.len > 0
+
+suite "macOS Platform Tests for $MODULE_NAME":
+  
+  setup:
+    when defined(macosx):
+      let procInfo = getProcessorInfo()
+      let memInfo = getMemoryInfo()
+      let diskInfo = getDiskInfo()
+      
+      echo "macOS System Information:"
+      echo fmt"  Version: {getSystemVersion()} (Build: {getBuildVersion()})"
+      echo fmt"  Architecture: {if isRunningOnAppleSilicon(): \"Apple Silicon\" else: \"Intel\"}"
+      echo fmt"  Processor: {procInfo.model}"
+      echo fmt"  CPU Cores: {procInfo.cores}"
+      echo fmt"  Total Memory: {memInfo.total div (1024*1024)} MB"
+      echo fmt"  Available Memory: {memInfo.available div (1024*1024)} MB"
+      echo fmt"  Disk Space: {diskInfo.free div (1024*1024)} MB free of {diskInfo.total div (1024*1024)} MB"
+      echo fmt"  SIP Enabled: {isSystemIntegrityProtectionEnabled()}"
+  
+  test "$MODULE_NAME macOS file system integration":
+    when defined(macosx):
+      let testDir = "/tmp/nimtestkit_macos_test"
+      createDir(testDir)
+      defer: removeDir(testDir)
+      
+      # Test HFS+ case sensitivity behavior
+      let file1 = testDir / "TestFile.txt"
+      let file2 = testDir / "testfile.txt"
+      
+      writeFile(file1, "content1")
+      
+      # Check if file system is case-sensitive
+      let isCaseSensitive = not fileExists(file2)
+      echo fmt"File system is case-sensitive: {isCaseSensitive}"
+      
+      if isCaseSensitive:
+        writeFile(file2, "content2")
+        check readFile(file1) != readFile(file2)
+      else:
+        check readFile(file1) == "content1"
+        check readFile(file2) == "content1"
+      
+      # Test extended attributes (xattr)
+      when compiles($MODULE.setExtendedAttribute):
+        $MODULE.setExtendedAttribute(file1, "com.example.test", "test_value")
+        let attrValue = $MODULE.getExtendedAttribute(file1, "com.example.test")
+        check attrValue == "test_value"
+      
+      # Test resource forks (if supported)
+      when compiles($MODULE.writeResourceFork):
+        $MODULE.writeResourceFork(file1, "test resource data")
+        let resourceData = $MODULE.readResourceFork(file1)
+        check resourceData == "test resource data"
+  
+  test "$MODULE_NAME macOS bundle support":
+    when defined(macosx):
+      let bundlePath = "/tmp/TestApp.app"
+      let contentsDir = bundlePath / "Contents"
+      let macOSDir = contentsDir / "MacOS"
+      let resourcesDir = contentsDir / "Resources"
+      
+      createDir(macOSDir)
+      createDir(resourcesDir)
+      defer: removeDir(bundlePath)
+      
+      # Create Info.plist
+      let infoPlist = contentsDir / "Info.plist"
+      writeFile(infoPlist, """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.example.testapp</string>
+    <key>CFBundleName</key>
+    <string>TestApp</string>
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
+    <key>CFBundleExecutable</key>
+    <string>TestApp</string>
+</dict>
+</plist>""")
+      
+      # Create executable (dummy)
+      let executable = macOSDir / "TestApp"
+      writeFile(executable, "#!/bin/bash\necho 'Test App'")
+      discard execCmdEx(fmt"chmod +x {executable}")
+      
+      # Test bundle structure
+      check fileExists(infoPlist)
+      check dirExists(macOSDir)
+      check dirExists(resourcesDir)
+      check fileExists(executable)
+      
+      # Test bundle operations
+      when compiles($MODULE.parsePlist):
+        let plistData = $MODULE.parsePlist(infoPlist)
+        check plistData.hasKey("CFBundleIdentifier")
+        check plistData["CFBundleIdentifier"].getStr() == "com.example.testapp"
+      
+      when compiles($MODULE.validateBundle):
+        let isValidBundle = $MODULE.validateBundle(bundlePath)
+        check isValidBundle
+  
+  test "$MODULE_NAME macOS Spotlight integration":
+    when defined(macosx):
+      # Test Spotlight search
+      let searchResults = testSpotlightSearch("kMDItemKind == 'Application'")
+      
+      when compiles($MODULE.searchSpotlight):
+        let moduleResults = $MODULE.searchSpotlight("kMDItemKind == 'Text'")
+        check moduleResults.len >= 0  # May be empty, but should not error
+      
+      # Test metadata extraction
+      when compiles($MODULE.getFileMetadata):
+        let testFile = "/tmp/test_metadata.txt"
+        writeFile(testFile, "Test content for metadata extraction")
+        defer: removeFile(testFile)
+        
+        let metadata = $MODULE.getFileMetadata(testFile)
+        check metadata.hasKey("kMDItemContentType")
+  
+  test "$MODULE_NAME macOS security and permissions":
+    when defined(macosx):
+      # Test SIP status
+      let sipEnabled = isSystemIntegrityProtectionEnabled()
+      echo fmt"System Integrity Protection: {sipEnabled}"
+      
+      # Test file permissions
+      let testFile = "/tmp/permission_test.txt"
+      writeFile(testFile, "permission test")
+      defer: removeFile(testFile)
+      
+      when compiles($MODULE.setFilePermissions):
+        $MODULE.setFilePermissions(testFile, 0o644)
+        let perms = $MODULE.getFilePermissions(testFile)
+        check perms == 0o644
+      
+      # Test keychain access
+      if testKeychain():
+        when compiles($MODULE.accessKeychain):
+          let keychainResult = $MODULE.accessKeychain("test-service")
+          # This may fail due to permissions, which is expected
+          echo fmt"Keychain access result: {keychainResult.success}"
+  
+  test "$MODULE_NAME macOS performance characteristics":
+    when defined(macosx):
+      let isAppleSilicon = isRunningOnAppleSilicon()
+      let procInfo = getProcessorInfo()
+      
+      # Adjust performance expectations based on hardware
+      let iterations = if isAppleSilicon: 10000 else: 5000
+      let expectedMaxTime = if isAppleSilicon: 0.0005 else: 0.001  # Apple Silicon is generally faster
+      
+      echo fmt"Running performance test with {iterations} iterations"
+      echo fmt"Expected max time per operation: {expectedMaxTime * 1000:.3f}ms"
+      
+      let startTime = cpuTime()
+      for i in 0..<iterations:
+        when compiles($MODULE.performOperation):
+          discard $MODULE.performOperation()
+        else:
+          # Default operation for performance testing
+          discard i * i
+      let endTime = cpuTime()
+      
+      let avgTime = (endTime - startTime) / iterations.float
+      echo fmt"Actual average time: {avgTime * 1000:.3f}ms"
+      
+      check avgTime < expectedMaxTime, fmt"Performance should be better than {expectedMaxTime * 1000:.3f}ms per operation"
+  
+  test "$MODULE_NAME macOS notification system":
+    when defined(macosx):
+      # Test notification posting (this may require user permission)
+      when compiles($MODULE.postNotification):
+        let result = $MODULE.postNotification(
+          title = "Test Notification",
+          message = "This is a test notification from Nim TestKit",
+          sound = "default"
+        )
+        # May fail due to permissions, which is expected
+        echo fmt"Notification result: {result.success}"
+      
+      # Test notification center interaction
+      when compiles($MODULE.clearNotifications):
+        $MODULE.clearNotifications("com.example.testapp")
+  
+  test "$MODULE_NAME macOS Core Foundation integration":
+    when defined(macosx):
+      # Test Core Foundation string handling
+      when compiles($MODULE.createCFString):
+        let cfString = $MODULE.createCFString("Test String")
+        check cfString != nil
+        
+        let nimString = $MODULE.cfStringToNim(cfString)
+        check nimString == "Test String"
+        
+        $MODULE.releaseCFString(cfString)
+      
+      # Test Core Foundation preferences
+      when compiles($MODULE.readPreference):
+        let prefValue = $MODULE.readPreference("com.apple.dock", "autohide")
+        # May be nil if preference doesn't exist
+        echo fmt"Dock autohide preference: {prefValue}"
+  
+  test "$MODULE_NAME macOS process management":
+    when defined(macosx):
+      # Test process enumeration
+      when compiles($MODULE.enumerateProcesses):
+        let processes = $MODULE.enumerateProcesses()
+        check processes.len > 0
+        
+        # Look for common macOS processes
+        let hasKernel = processes.anyIt("kernel_task" in it.name)
+        let hasLaunchd = processes.anyIt("launchd" in it.name)
+        check hasKernel or hasLaunchd  # At least one should be present
+      
+      # Test launch services
+      when compiles($MODULE.findApplicationForType):
+        let textEditor = $MODULE.findApplicationForType("txt")
+        check textEditor.len > 0
+        echo fmt"Default text editor: {textEditor}"
+  
+  test "$MODULE_NAME macOS hardware information":
+    when defined(macosx):
+      let procInfo = getProcessorInfo()
+      let memInfo = getMemoryInfo()
+      
+      # Test hardware capability detection
+      when compiles($MODULE.detectHardwareCapabilities):
+        let caps = $MODULE.detectHardwareCapabilities()
+        
+        if isRunningOnAppleSilicon():
+          check caps.hasUnifiedMemory
+          check caps.supportsMetalPerformanceShaders
+        else:
+          check caps.architecture == "x86_64"
+      
+      # Test thermal state monitoring
+      when compiles($MODULE.getThermalState):
+        let thermalState = $MODULE.getThermalState()
+        check thermalState in ["normal", "fair", "serious", "critical"]
+        echo fmt"Thermal state: {thermalState}"
+  
+  test "$MODULE_NAME macOS sandbox compatibility":
+    when defined(macosx):
+      # Test sandbox-compatible operations
+      let homeDir = getHomeDir()
+      let documentsDir = homeDir / "Documents"
+      
+      # Test access to allowed directories
+      when compiles($MODULE.accessUserDirectory):
+        if dirExists(documentsDir):
+          let result = $MODULE.accessUserDirectory(documentsDir)
+          check result.success
+        
+        # Test access to restricted directories (should fail gracefully)
+        let restrictedResult = $MODULE.accessUserDirectory("/System")
+        # May fail due to SIP, which is expected
+        echo fmt"Restricted directory access: {restrictedResult.success}"
+  
+  test "$MODULE_NAME macOS localization support":
+    when defined(macosx):
+      # Test locale detection
+      when compiles($MODULE.getCurrentLocale):
+        let locale = $MODULE.getCurrentLocale()
+        check locale.len > 0
+        echo fmt"Current locale: {locale}"
+      
+      # Test date/time formatting
+      when compiles($MODULE.formatDateLocalized):
+        let now = now()
+        let formatted = $MODULE.formatDateLocalized(now)
+        check formatted.len > 0
+        echo fmt"Localized date: {formatted}"
+      
+      # Test number formatting
+      when compiles($MODULE.formatNumberLocalized):
+        let number = 1234.56
+        let formatted = $MODULE.formatNumberLocalized(number)
+        check formatted.len > 0
+        echo fmt"Localized number: {formatted}"
+  
+  test "$MODULE_NAME macOS memory management":
+    when defined(macosx):
+      let memInfo = getMemoryInfo()
+      let initialMemory = getOccupiedMem()
+      
+      echo fmt"System memory: {memInfo.total div (1024*1024)} MB total, {memInfo.available div (1024*1024)} MB available"
+      echo fmt"Process memory before test: {initialMemory div (1024*1024)} MB"
+      
+      # Test memory allocation patterns
+      var largeData: seq[byte] = newSeq[byte](50_000_000)  # 50MB
+      for i in 0..<largeData.len:
+        largeData[i] = byte(i mod 256)
+      
+      let peakMemory = getOccupiedMem()
+      echo fmt"Process memory at peak: {peakMemory div (1024*1024)} MB"
+      
+      # Test memory pressure handling
+      when compiles($MODULE.handleMemoryPressure):
+        $MODULE.handleMemoryPressure()
+      
+      # Clean up
+      largeData = @[]
+      GC_fullCollect()
+      
+      let finalMemory = getOccupiedMem()
+      echo fmt"Process memory after cleanup: {finalMemory div (1024*1024)} MB"
+      
+      # Memory should be released
+      check finalMemory < peakMemory

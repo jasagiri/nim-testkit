@@ -1,0 +1,6 @@
+nimTitle	config	config.html	module config		0
+nim	TestKitConfig	config.html#TestKitConfig	object TestKitConfig		8
+nim	getDefaultConfig	config.html#getDefaultConfig	proc getDefaultConfig(): TestKitConfig		19
+nim	loadConfig	config.html#loadConfig,string	proc loadConfig(configPath = "nimtestkit.toml"): TestKitConfig		40
+nim	saveConfig	config.html#saveConfig,TestKitConfig,string	proc saveConfig(config: TestKitConfig; configPath = "nimtestkit.toml")		80
+nim	createDefaultConfigFile	config.html#createDefaultConfigFile,string	proc createDefaultConfigFile(path = "nimtestkit.toml")		117

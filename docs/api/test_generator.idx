@@ -1,0 +1,6 @@
+nimTitle	test_generator	test_generator.html	module test_generator		0
+nim	ProjectConfig	test_generator.html#ProjectConfig	type ProjectConfig		10
+nim	ModuleInfo	test_generator.html#ModuleInfo	object ModuleInfo		12
+nim	FunctionInfo	test_generator.html#FunctionInfo	object FunctionInfo		18
+nim	analyze	test_generator.html#analyze,TestKitConfig	proc analyze(config: ProjectConfig): seq[ModuleInfo]		35
+nim	generateTestFile	test_generator.html#generateTestFile,TestKitConfig,ModuleInfo	proc generateTestFile(config: ProjectConfig; module: ModuleInfo; isNew = true)		121

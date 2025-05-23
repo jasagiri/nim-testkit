@@ -1,0 +1,50 @@
+# Nim TestKit configuration file
+
+[directories]
+# Source directory (relative to project root)
+source = "src"
+# Tests directory (relative to project root)
+tests = "tests"
+
+[patterns]
+# File patterns to include
+include = "*.nim"
+# File patterns to exclude
+exclude = "test_*.nim"
+# Test file naming pattern (${module} will be replaced)
+test_name = "test_${module}.nim"
+
+[coverage]
+# Minimum coverage threshold (percent)
+threshold = 80.0
+
+[tests]
+# Run tests in parallel
+parallel = false
+# Use color output
+color = true
+# Use power_assert for enhanced assertion messages
+power_assert = true
+
+[jujutsu]
+# Enable MCP-Jujutsu integration for advanced VCS features
+enabled = false  # Deprecated, use [vcs] section
+
+[vcs]
+# Enable/disable version control system integrations
+git = true          # Enable Git integration
+jujutsu = false     # Enable Jujutsu integration (with MCP-Jujutsu support)
+mercurial = false   # Enable Mercurial (hg) integration
+svn = false         # Enable Subversion integration
+fossil = false      # Enable Fossil integration
+
+[templates]
+test = """
+import unittest
+import power_assert
+import "$MODULE"
+
+suite "$MODULE_NAME Tests":
+  test "example test":
+    assert true
+"""

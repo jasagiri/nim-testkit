@@ -1,0 +1,264 @@
+import unittest, times, stats, strutils, sequtils, algorithm, math
+import $MODULE
+
+type
+  BenchmarkResult = object
+    functionName: string
+    iterations: int
+    totalTime: float
+    avgTime: float
+    minTime: float
+    maxTime: float
+    stdDev: float
+    median: float
+    percentile95: float
+    memoryUsed: int
+    allocations: int
+
+  PerformanceRegression = object
+    threshold: float
+    baseline: float
+    current: float
+    regressed: bool
+
+proc calculateStats(times: seq[float]): tuple[avg, min, max, stdDev, median, p95: float] =
+  ## Calculate statistical measures for timing data
+  if times.len == 0:
+    return (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+  
+  let sortedTimes = times.sorted()
+  
+  result.avg = times.sum() / times.len.float
+  result.min = sortedTimes[0]
+  result.max = sortedTimes[^1]
+  result.median = sortedTimes[times.len div 2]
+  
+  # Calculate standard deviation
+  let variance = times.mapIt((it - result.avg) * (it - result.avg)).sum() / times.len.float
+  result.stdDev = sqrt(variance)
+  
+  # 95th percentile
+  let p95Index = int(0.95 * times.len.float)
+  result.p95 = sortedTimes[min(p95Index, times.len - 1)]
+
+proc benchmark(name: string, iterations: int, warmupRuns: int, 
+               benchmarkProc: proc(), memoryTracking: bool = true): BenchmarkResult =
+  ## Run benchmark with statistical analysis
+  result.functionName = name
+  result.iterations = iterations
+  
+  var times: seq[float] = @[]
+  let memBefore = if memoryTracking: getOccupiedMem() else: 0
+  
+  echo fmt"Running benchmark: {name}"
+  echo fmt"Warmup runs: {warmupRuns}, Benchmark runs: {iterations}"
+  
+  # Warmup runs
+  for i in 0..<warmupRuns:
+    benchmarkProc()
+  
+  # Force garbage collection before benchmarking
+  GC_fullCollect()
+  
+  # Actual benchmark runs
+  for i in 0..<iterations:
+    let start = cpuTime()
+    benchmarkProc()
+    let elapsed = cpuTime() - start
+    times.add(elapsed)
+    
+    # Progress indicator for long benchmarks
+    if iterations > 100 and (i + 1) mod (iterations div 10) == 0:
+      echo fmt"Progress: {((i + 1).float / iterations.float * 100):.0f}%"
+  
+  let memAfter = if memoryTracking: getOccupiedMem() else: 0
+  result.memoryUsed = memAfter - memBefore
+  
+  # Calculate statistics
+  let stats = calculateStats(times)
+  result.totalTime = times.sum()
+  result.avgTime = stats.avg
+  result.minTime = stats.min
+  result.maxTime = stats.max
+  result.stdDev = stats.stdDev
+  result.median = stats.median
+  result.percentile95 = stats.p95
+
+proc formatBenchmarkResult(result: BenchmarkResult): string =
+  ## Format benchmark result for display
+  fmt"""
+Benchmark Results for {result.functionName}:
+  Iterations: {result.iterations}
+  Total Time: {result.totalTime:.4f}s
+  Average Time: {result.avgTime * 1000:.3f}ms
+  Median Time: {result.median * 1000:.3f}ms
+  Min Time: {result.minTime * 1000:.3f}ms
+  Max Time: {result.maxTime * 1000:.3f}ms
+  Std Deviation: {result.stdDev * 1000:.3f}ms
+  95th Percentile: {result.percentile95 * 1000:.3f}ms
+  Memory Used: {result.memoryUsed} bytes
+  Throughput: {1.0 / result.avgTime:.0f} ops/sec
+"""
+
+proc checkPerformanceRegression(result: BenchmarkResult, baseline: float, 
+                               threshold: float = 0.1): PerformanceRegression =
+  ## Check for performance regression
+  result.threshold = threshold
+  result.baseline = baseline
+  result.current = result.avgTime
+  result.regressed = result.current > baseline * (1.0 + threshold)
+
+suite "Benchmark Tests for $MODULE_NAME":
+  
+  test "$FUNCTION_NAME performance benchmark":
+    let result = benchmark("$FUNCTION_NAME", 1000, 10) do:
+      # Call the function being benchmarked
+      # Customize this based on the function signature and requirements
+      when $FUNCTION_NAME is proc(): auto:
+        discard $FUNCTION_NAME()
+      elif $FUNCTION_NAME is proc(s: string): auto:
+        discard $FUNCTION_NAME("benchmark test input")
+      elif $FUNCTION_NAME is proc(i: int): auto:
+        discard $FUNCTION_NAME(42)
+      else:
+        # Add more cases based on function signature
+        discard
+    
+    echo formatBenchmarkResult(result)
+    
+    # Performance assertions
+    check result.avgTime < 0.001, "Average execution time should be under 1ms"
+    check result.maxTime < 0.01, "Maximum execution time should be under 10ms"
+    check result.memoryUsed < 1_000_000, "Memory usage should be under 1MB"
+    
+    # Consistency check
+    let consistencyRatio = result.maxTime / result.avgTime
+    check consistencyRatio < 5.0, "Performance should be consistent (max < 5x average)"
+    
+    # Check standard deviation (low deviation = consistent performance)
+    let coefficientOfVariation = result.stdDev / result.avgTime
+    check coefficientOfVariation < 0.5, "Performance variation should be low"
+  
+  test "$FUNCTION_NAME scalability benchmark":
+    # Test with different input sizes to check scalability
+    let inputSizes = @[10, 100, 1000, 10000]
+    var scalabilityResults: seq[tuple[size: int, avgTime: float]] = @[]
+    
+    for size in inputSizes:
+      let result = benchmark(fmt"$FUNCTION_NAME_size_{size}", 100, 5) do:
+        # Generate input of the specified size and test
+        when $FUNCTION_NAME is proc(s: string): auto:
+          let input = "x".repeat(size)
+          discard $FUNCTION_NAME(input)
+        elif $FUNCTION_NAME is proc(data: seq[int]): auto:
+          let input = newSeq[int](size)
+          discard $FUNCTION_NAME(input)
+        else:
+          # For functions without scalable inputs, just run multiple times
+          for i in 0..<size div 10:
+            discard $FUNCTION_NAME()
+      
+      scalabilityResults.add((size, result.avgTime))
+      echo fmt"Size {size}: {result.avgTime * 1000:.3f}ms"
+    
+    # Check that performance scales reasonably
+    if scalabilityResults.len >= 2:
+      let firstResult = scalabilityResults[0]
+      let lastResult = scalabilityResults[^1]
+      
+      # Time complexity should not be worse than quadratic for most operations
+      let scalingFactor = lastResult.avgTime / firstResult.avgTime
+      let sizeFactor = lastResult.size.float / firstResult.size.float
+      let complexity = log(scalingFactor) / log(sizeFactor)
+      
+      echo fmt"Estimated time complexity: O(n^{complexity:.2f})"
+      check complexity < 3.0, "Time complexity should be reasonable (< O(n³))"
+  
+  test "$FUNCTION_NAME memory efficiency benchmark":
+    # Test memory usage patterns
+    let memBefore = getOccupiedMem()
+    
+    # Run function multiple times to check for memory leaks
+    for i in 0..<1000:
+      when $FUNCTION_NAME is proc(): auto:
+        discard $FUNCTION_NAME()
+      else:
+        # Customize based on function signature
+        discard
+      
+      # Force garbage collection periodically
+      if i mod 100 == 0:
+        GC_fullCollect()
+    
+    let memAfter = getOccupiedMem()
+    let memoryGrowth = memAfter - memBefore
+    
+    echo fmt"Memory growth after 1000 iterations: {memoryGrowth} bytes"
+    
+    # Memory growth should be minimal (no significant leaks)
+    check memoryGrowth < 10_000_000, "Memory growth should be under 10MB"
+  
+  test "$FUNCTION_NAME concurrent performance":
+    # Test performance under concurrent access (if applicable)
+    when compiles(spawn $FUNCTION_NAME()):
+      import threadpool
+      
+      let numThreads = 4
+      let iterationsPerThread = 250
+      
+      proc threadBenchmark(): float =
+        let start = cpuTime()
+        for i in 0..<iterationsPerThread:
+          discard $FUNCTION_NAME()
+        return cpuTime() - start
+      
+      var futures: seq[FlowVar[float]] = @[]
+      let startTime = cpuTime()
+      
+      # Spawn concurrent executions
+      for i in 0..<numThreads:
+        futures.add(spawn threadBenchmark())
+      
+      # Wait for all threads to complete
+      var totalThreadTime = 0.0
+      for future in futures:
+        totalThreadTime += ^future
+      
+      let totalWallTime = cpuTime() - startTime
+      let efficiency = (totalThreadTime / totalWallTime) / numThreads.float
+      
+      echo fmt"Concurrent Performance:"
+      echo fmt"  Threads: {numThreads}"
+      echo fmt"  Wall time: {totalWallTime:.4f}s"
+      echo fmt"  Total thread time: {totalThreadTime:.4f}s"
+      echo fmt"  Parallel efficiency: {efficiency:.2%}"
+      
+      # Parallel efficiency should be reasonable
+      check efficiency > 0.5, "Parallel efficiency should be > 50%"
+      
+      sync()  # Clean up thread pool
+  
+  test "$FUNCTION_NAME regression testing":
+    # Compare against baseline performance (if available)
+    let currentResult = benchmark("$FUNCTION_NAME_regression", 500, 10) do:
+      when $FUNCTION_NAME is proc(): auto:
+        discard $FUNCTION_NAME()
+      else:
+        discard
+    
+    # This would typically load baseline from a file or configuration
+    # For template purposes, we'll use a placeholder baseline
+    const baselineTime = 0.0001  # 0.1ms baseline
+    
+    let regression = checkPerformanceRegression(currentResult, baselineTime, 0.2)  # 20% threshold
+    
+    if regression.regressed:
+      echo fmt"PERFORMANCE REGRESSION DETECTED!"
+      echo fmt"  Baseline: {regression.baseline * 1000:.3f}ms"
+      echo fmt"  Current: {regression.current * 1000:.3f}ms"
+      echo fmt"  Regression: {((regression.current / regression.baseline - 1.0) * 100):.1f}%"
+    else:
+      echo fmt"Performance: {currentResult.avgTime * 1000:.3f}ms (within acceptable range)"
+    
+    # Fail if significant regression is detected
+    check not regression.regressed, "Performance should not regress significantly"
