@@ -1,5 +1,5 @@
 import unittest
-import ../src/jujutsu_test_integration
+import ../src/integrations/vcs/jujutsu
 import std/[times, os]
 
 suite "Jujutsu Test Integration Tests":

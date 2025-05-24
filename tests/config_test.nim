@@ -1,5 +1,5 @@
 import unittest
-import "../src/config"
+import ../src/config/config
 import std/random
 
 suite "Config Tests":

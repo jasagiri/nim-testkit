@@ -1,5 +1,5 @@
 # Simple test to avoid name conflicts
-import ../src/test_runner
+import ../src/execution/runner
 import std/[os, strutils]
 
 # Direct testing without unittest

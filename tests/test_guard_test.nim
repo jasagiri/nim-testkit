@@ -1,5 +1,5 @@
 import unittest
-import "../src/test_guard" as tguard
+import "../src/execution/guard" as tguard
 import std/random
 
 suite "Test Guard Tests":

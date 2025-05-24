@@ -1,7 +1,7 @@
 import unittest, os
-import "../src/test_generator"
-import "../src/coverage_helper" # For getProjectRootDir
-import "../src/config"
+import ../src/generation/generator
+import ../src/analysis/coverage # For getProjectRootDir
+import ../src/config/config
 
 suite "Test Generator":
   test "Project configuration loading works":

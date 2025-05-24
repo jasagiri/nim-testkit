@@ -4,7 +4,7 @@
 
 import unittest
 import std/[os, asyncdispatch, strformat, tables, strutils, json, options]
-import ../src/vcs_commands
+import ../src/integrations/vcs/commands
 import ../src/mcp/[mcp_types, mcp_client, mcp_manager]
 
 suite "MCP Integration Tests":

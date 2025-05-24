@@ -1,7 +1,7 @@
 import unittest
 import os
 import std/strutils
-import ../src/config
+import ../src/config/config
 
 suite "Configuration System Tests":
   test "Load default configuration":

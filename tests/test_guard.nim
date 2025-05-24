@@ -1,5 +1,5 @@
 import unittest, os, times, osproc, strutils
-import "../src/test_guard"
+import "../src/execution/guard"
 
 # Create a mock directory structure for testing
 proc createMockDirectoryStructure(baseDir: string) =

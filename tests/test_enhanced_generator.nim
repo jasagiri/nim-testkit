@@ -1,6 +1,6 @@
 import unittest
-import ../src/test_generator
-import ../src/config
+import ../src/generation/generator
+import ../src/config/config
 import std/[os, strutils]
 
 suite "Enhanced Test Generator Tests":

@@ -1,5 +1,5 @@
 import unittest
-import "../src/test_generator" as tg
+import "../src/generation/generator" as tg
 import std/random
 
 suite "Test Generator Tests":

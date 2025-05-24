@@ -1,5 +1,5 @@
 import unittest, os, times, strutils, tables
-import ../src/advanced_testing, ../src/platform_support
+import ../src/advanced/testing, ../src/platform_support
 
 suite "Advanced Testing Features":
   

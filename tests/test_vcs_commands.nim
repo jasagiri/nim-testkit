@@ -1,5 +1,5 @@
 import unittest, os
-import "../src/vcs_commands"
+import "../src/integrations/vcs/commands"
 
 suite "VCS Commands Tests":
   test "validateChangeDescription returns true by default":

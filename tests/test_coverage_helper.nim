@@ -1,6 +1,6 @@
 import unittest, os
-import "../src/coverage_helper"
-import "../src/config"
+import ../src/analysis/coverage
+import ../src/config/config
 
 suite "Coverage Helper Tests":
   test "Coverage helper imports correctly":

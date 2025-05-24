@@ -17,10 +17,10 @@ suite "Nim TestKit Basic Test":
     
   test "Source files exist":
     # Check each source file exists
-    check os.fileExists(os.joinPath(pkgRootDir, "src", "test_generator.nim"))
-    check os.fileExists(os.joinPath(pkgRootDir, "src", "test_runner.nim"))
-    check os.fileExists(os.joinPath(pkgRootDir, "src", "test_guard.nim"))
-    check os.fileExists(os.joinPath(pkgRootDir, "src", "coverage_helper.nim"))
+    check os.fileExists(os.joinPath(pkgRootDir, "src", "generation", "generator.nim"))
+    check os.fileExists(os.joinPath(pkgRootDir, "src", "execution", "runner.nim"))
+    check os.fileExists(os.joinPath(pkgRootDir, "src", "execution", "guard.nim"))
+    check os.fileExists(os.joinPath(pkgRootDir, "src", "analysis", "coverage.nim"))
     
   test "Scripts exist":
     when defined(windows):

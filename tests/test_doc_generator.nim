@@ -1,6 +1,6 @@
 import unittest, os, strutils
-import "../src/doc_generator"
-import "../src/config"
+import ../src/documentation/generator
+import ../src/config/config
 
 suite "Documentation Generator Tests":
   test "extractTestDocs extracts test information":

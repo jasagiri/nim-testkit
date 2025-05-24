@@ -1,5 +1,5 @@
 import unittest
-import "../src/vcs_commands"
+import "../src/integrations/vcs/commands"
 import std/random
 
 suite "src/vcs_commands_NAME Tests":

@@ -1,0 +1,19 @@
+{
+  "modules": [
+    {
+      "name": "nim-lang-core",
+      "repo_url": "https://github.com/nim-lang/core.git",
+      "branch": "main"
+    },
+    {
+      "name": "nim-libaspects",
+      "repo_url": "https://github.com/aspects/nim-libaspects.git",
+      "branch": "main"
+    },
+    {
+      "name": "nim-design-patterns",
+      "repo_url": "https://github.com/patterns/nim-design-patterns.git",
+      "branch": "develop"
+    }
+  ]
+}

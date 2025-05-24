@@ -1,5 +1,5 @@
 import unittest
-import "../src/coverage_helper"
+import "../src/analysis/coverage"
 import std/random
 
 suite "src/coverage_helper_NAME Tests":

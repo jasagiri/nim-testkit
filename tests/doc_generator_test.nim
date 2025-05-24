@@ -1,5 +1,5 @@
 import unittest
-import "../src/doc_generator"
+import "../src/documentation/generator"
 import std/random
 
 suite "src/doc_generator_NAME Tests":
